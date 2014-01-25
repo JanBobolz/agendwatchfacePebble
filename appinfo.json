@@ -1,0 +1,25 @@
+{
+    "versionLabel": "1.1",
+    "uuid": "1f366804-f1d2-4288-b71a-708661777887",
+    "appKeys": {},
+    "longName": "Agenda Watchface",
+    "versionCode": 3,
+    "capabilities": [
+        ""
+    ],
+    "shortName": "Agenda",
+    "companyName": "janbobolz",
+    "watchapp": {
+        "watchface": true
+    },
+    "resources": {
+        "media": [
+            {
+                "characterRegex": "[0-9: ]",
+                "type": "font",
+                "name": "FONT_ROBOTO_CONDENSED_30",
+                "file": "fonts/Roboto-Condensed-webfont.ttf"
+            }
+        ]
+    }
+}
