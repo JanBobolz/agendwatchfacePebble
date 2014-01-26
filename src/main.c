@@ -29,7 +29,12 @@ TextLayer *text_layer_time = 0; //layer for the current time (if header enabled 
 TextLayer *text_layer_date = 0; //layer for current date (if header enabled)
 TextLayer *text_layer_weekday = 0; //layer for current weekday (if header enabled)
 
-GFont roboto_condensed; //Font for current time
+GFont time_font = 0; //Font for current time (custom font)
+GFont date_font;
+int time_font_id = -1; //id of time_font according to Android settings (-1 being not loaded)
+int header_height = 0; //height of the header
+int header_time_width = 0; //width of the time layer
+int header_weekday_height = 0; //height of the weekday layer
 
 //Set font variables (font, font_bold, line_height) according to settings
 void set_font_from_settings() {
@@ -216,7 +221,7 @@ void display_cal_data() { //(Re-)creates all the layers for the events in the da
 	num_separators = 0;
 	refresh_at = 0; //contains the earliest time that we need to schedule a refresh for
 	CalendarEvent *previous_event = 0; //contains the event from previous loop iteration (or 0)
-	int y = settings_get_bool_flags() & SETTINGS_BOOL_SHOW_CLOCK_HEADER ? 40 : 0; //vertical offset to start displaying layers
+	int y = header_height; //vertical offset to start displaying layers
 	caltime_t now = get_current_time();
 
 	for (int i=0;i<event_db_size()&&y<168;i++) {
@@ -306,14 +311,24 @@ void update_clock() { //updates the layer for the current time (if exists)
 void update_date(struct tm *time) { //updates the layer for the current date (if exists)
 	if (text_layer_date != 0) {
 		static char date_text[] = "NameOfTheMonth 01";
-		strftime(date_text, sizeof(date_text), "%B %d", time);
+		
+		if (header_time_width <= 75) //if time takes much vertical space, abbreviate
+			strftime(date_text, sizeof(date_text), "%B %d", time); //don't abbreviate
+		else
+			strftime(date_text, sizeof(date_text), "%b %d", time); //abbreviate
+		
 		date_text[sizeof(date_text)-1] = 0;
 		text_layer_set_text(text_layer_date, date_text);
 	}
 	
 	if (text_layer_weekday != 0) {
 		static char weekday_text[] = "Wednesday";
-		strftime(weekday_text, sizeof(weekday_text), "%A", time);
+		
+		if (header_time_width <= 75) //if time takes much vertical space, abbreviate
+			strftime(weekday_text, sizeof(weekday_text), "%A", time); //don't abbreviate
+		else
+			strftime(weekday_text, sizeof(weekday_text), "%a", time); //abbreviate
+		
 		weekday_text[sizeof(weekday_text)-1] = 0;
 		text_layer_set_text(text_layer_weekday, weekday_text);
 	}
@@ -340,32 +355,71 @@ static void handle_time_tick(struct tm *tick_time, TimeUnits units_changed) { //
 	}
 }
 
-//Create the header that shows current time and date (if settings say so)
-void create_header(Layer *window_layer) {
-	if (!(settings_get_bool_flags() & SETTINGS_BOOL_SHOW_CLOCK_HEADER))
+//Populates time_font, time_font_id and header_height
+void set_time_font_from_settings() {
+	int time_font_id_new = (int) ((settings_get_bool_flags() & (SETTINGS_BOOL_HEADER_SIZE0|SETTINGS_BOOL_HEADER_SIZE1))/SETTINGS_BOOL_HEADER_SIZE0); //figure out index of the font from settings (two-bit number)
+	
+	if (time_font_id_new == time_font_id) //then we're already done
 		return;
 	
+	//Unload previous font
+	if (time_font != 0)
+		fonts_unload_custom_font(time_font);
+	
+	//Apply new font and set constants
+	time_font_id = time_font_id_new;
+	
+	switch (time_font_id) {
+		case 1: //big time/header
+			time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ROBOTO_CONDENSED_BOLD_38));
+			date_font = fonts_get_system_font(FONT_KEY_GOTHIC_18);
+			header_weekday_height = 18;
+			header_height = 48;
+			header_time_width = 95;
+		break;
+		
+		case 0: //small time/header
+		default:
+			time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ROBOTO_CONDENSED_30));
+			date_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+			header_weekday_height = 16;
+			header_height = 40;
+			header_time_width = 75;
+		break;
+	}
+}
+
+//Create the header that shows current time and date (if settings say so)
+void create_header(Layer *window_layer) {
+	if (!(settings_get_bool_flags() & SETTINGS_BOOL_SHOW_CLOCK_HEADER)) {
+		header_height = 0;
+		return;
+	}
+	
+	//Figure out font for the time
+	set_time_font_from_settings();
+	
 	//Create time layer
-	text_layer_time = text_layer_create(GRect(0, 0, 75, 40));
+	text_layer_time = text_layer_create(GRect(0, 0, header_time_width, header_height));
 	text_layer_set_background_color(text_layer_time, GColorBlack);
 	text_layer_set_text_color(text_layer_time, GColorWhite);
-	text_layer_set_font(text_layer_time, roboto_condensed);
+	text_layer_set_font(text_layer_time, time_font);
 	layer_add_child(window_layer, text_layer_get_layer(text_layer_time));
 	
 	//Create date layer
-	text_layer_date = text_layer_create(GRect(75, 16, 144-75, 20));
+	text_layer_date = text_layer_create(GRect(header_time_width, header_weekday_height, 144-header_time_width, header_height-header_weekday_height));
 	text_layer_set_background_color(text_layer_date, GColorBlack);
 	text_layer_set_text_color(text_layer_date, GColorWhite);
 	text_layer_set_text_alignment(text_layer_date, GTextAlignmentRight);
-	text_layer_set_font(text_layer_date, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+	text_layer_set_font(text_layer_date, date_font);
 	layer_add_child(window_layer, text_layer_get_layer(text_layer_date));
 	
 	//Create weekday layer
-	text_layer_weekday = text_layer_create(GRect(75, 0, 144-75, 16));
+	text_layer_weekday = text_layer_create(GRect(header_time_width, 0, 144-header_time_width, header_weekday_height));
 	text_layer_set_background_color(text_layer_weekday, GColorBlack);
 	text_layer_set_text_color(text_layer_weekday, GColorWhite);
 	text_layer_set_text_alignment(text_layer_weekday, GTextAlignmentRight);
-	text_layer_set_font(text_layer_weekday, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+	text_layer_set_font(text_layer_weekday, date_font);
 	layer_add_child(window_layer, text_layer_get_layer(text_layer_weekday));
 	
 	//Show initial values
@@ -398,9 +452,6 @@ void handle_init(void) {
 	window = window_create();
 	window_stack_push(window, true);
  	window_set_background_color(window, GColorBlack);
-
-	//Load font(s)
-	roboto_condensed = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ROBOTO_CONDENSED_30));
 	
 	//Read persistent data
 	if (persist_exists(PERSIST_LAST_SYNC)) 
@@ -444,7 +495,8 @@ void handle_deinit(void) {
 	window_destroy(window);
 	
 	//Unload font(s)
-	fonts_unload_custom_font(roboto_condensed);
+	if (time_font != 0)
+		fonts_unload_custom_font(time_font);
 	
 	//Write persistent data
 	persist_write_data(PERSIST_LAST_SYNC, &last_sync, sizeof(last_sync));

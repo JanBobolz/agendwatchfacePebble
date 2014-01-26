@@ -23,7 +23,13 @@
 
 //Second bit of font size id
 #define SETTINGS_BOOL_FONT_SIZE1 0x40
+	
+//Size of time in the header (lower bit)
+#define SETTINGS_BOOL_HEADER_SIZE0 0x80
 
+//Size of time in the header (higher bit)
+#define SETTINGS_BOOL_HEADER_SIZE1 0x100
+	
 void settings_persist(); //saves settings to persistent storage.
 void settings_restore_persisted(); //restores settings from persistent storage (if exists)
 
