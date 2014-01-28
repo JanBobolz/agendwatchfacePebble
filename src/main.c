@@ -85,7 +85,12 @@ void time_to_showstring(char* buffer, size_t buffersize, caltime_t time, bool ho
 		buffer++;
 	}
 	
-	snprintf(buffer, buffersize, append_am_pm ? (caltime_get_hour(time) <= 12 ? "%02ld:%02ldam" : "%02ld:%02ldpm") : "%02ld:%02ld", hour_12 ? caltime_get_hour(time) % 12 : caltime_get_hour(time), caltime_get_minute(time));
+	if (hour_12) {
+		int hour = (int) caltime_get_hour(time);
+		snprintf(buffer, buffersize, append_am_pm ? (hour < 12 ? "%d:%02dam" : "%d:%02dpm") : "%d:%02d", hour % 12 == 0 ? 12 : hour % 12, (int) caltime_get_minute(time));
+	}
+	else
+		snprintf(buffer, buffersize, append_am_pm ? (caltime_get_hour(time) <= 12 ? "%02ld:%02ldam" : "%02ld:%02ldpm") : "%02ld:%02ld", caltime_get_hour(time), caltime_get_minute(time));
 }
 
 //Creates the necessary layers for an event. Returns y+[height that the new layers take]. Every event has up to two rows, both consisting of a time and a text portion (either may be empty)
