@@ -30,6 +30,9 @@
 //Size of time in the header (higher bit)
 #define SETTINGS_BOOL_HEADER_SIZE1 0x100
 	
+//Whether or not to show the date in the separator layers
+#define SETTINGS_BOOL_SEPARATOR_DATE 0x200
+	
 void settings_persist(); //saves settings to persistent storage.
 void settings_restore_persisted(); //restores settings from persistent storage (if exists)
 

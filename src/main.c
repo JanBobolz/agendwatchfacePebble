@@ -23,6 +23,7 @@ int font_index; //contains a two-bit number for the chosen font according to the
 
 int num_separators = 0; //number of separators. As many elements will be in the day_separator_layers array
 TextLayer **day_separator_layers = 0; //layers for showing weekday
+char **day_separator_texts = 0; //texts on separators
 
 Window *window; //the watchface's only window
 TextLayer *text_layer_time = 0; //layer for the current time (if header enabled in settings)
@@ -183,6 +184,14 @@ int create_event_layers(int i, int y, Layer* parent, CalendarEvent* event) {
 //Creates separator (like the "Monday" layer, separating today's events from tomorrow's), returns y+[own height]
 int create_day_separator_layer(int i, int y, Layer* parent, CalendarEvent* event) {
 	static char *daystrings[8] = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Tomorrow"};
+	static char *monthstrings[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"};
+	
+	//Set text
+	day_separator_texts[i] = malloc(sizeof(char)*20);
+	if (settings_get_bool_flags() & SETTINGS_BOOL_SEPARATOR_DATE)
+		snprintf(day_separator_texts[i], 20, "%s, %s %02ld", daystrings[cal_begins_tomorrow(event) ? 7 : caltime_get_weekday(event->start_time)], monthstrings[caltime_get_month(event->start_time)-1], caltime_get_day(event->start_time));
+	else
+		snprintf(day_separator_texts[i], 20, "%s", daystrings[cal_begins_tomorrow(event) ? 7 : caltime_get_weekday(event->start_time)]);
 	
 	//Create layer
 	day_separator_layers[i] = text_layer_create(GRect(0,y,144,line_height));
@@ -190,7 +199,7 @@ int create_day_separator_layer(int i, int y, Layer* parent, CalendarEvent* event
 	text_layer_set_text_color(day_separator_layers[i], GColorWhite);
 	text_layer_set_font(day_separator_layers[i], font);
 	text_layer_set_text_alignment(day_separator_layers[i], GTextAlignmentRight);
-	text_layer_set_text(day_separator_layers[i], daystrings[cal_begins_tomorrow(event) ? 7 : caltime_get_weekday(event->start_time)]);
+	text_layer_set_text(day_separator_layers[i], day_separator_texts[i]);
 	layer_add_child(parent, text_layer_get_layer(day_separator_layers[i]));
 	
 	return y+line_height;
@@ -217,6 +226,7 @@ void display_cal_data() { //(Re-)creates all the layers for the events in the da
 	event_time2 = malloc(sizeof(TextLayer*)*event_db_size());
 	event_texts = malloc(sizeof(char*)*event_db_size()*4); //a string for every text layer
 	day_separator_layers = malloc(sizeof(TextLayer*)*event_db_size());
+	day_separator_texts = malloc(sizeof(char*)*event_db_size());
 	
 	//Figure out font to use
 	set_font_from_settings();
@@ -269,8 +279,10 @@ void remove_cal_data() { //tidies up anything in the event_layer_... arrays
 				free(event_texts[i*4+j]);
 		}
 	}
-	for (int i=0;i<num_separators;i++)
+	for (int i=0;i<num_separators;i++) {
 		text_layer_destroy(day_separator_layers[i]);
+		free(day_separator_texts[i]);
+	}
 	
 	num_events = 0;
 	num_separators = 0;
@@ -286,6 +298,8 @@ void remove_cal_data() { //tidies up anything in the event_layer_... arrays
 		free(day_separator_layers);
 	if (event_texts != 0)
 		free(event_texts);
+	if (day_separator_texts != 0)
+		free(day_separator_texts);
 	
 	event_text1 = 0;
 	event_text2 = 0;
@@ -293,6 +307,7 @@ void remove_cal_data() { //tidies up anything in the event_layer_... arrays
 	event_time2 = 0;
 	event_texts = 0;
 	day_separator_layers = 0;
+	day_separator_texts = 0;
 }
 
 void handle_new_data() { //Sync done. Show new data from database

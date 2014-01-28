@@ -41,4 +41,6 @@ int32_t caltime_get_weekday(caltime_t t);
 int32_t caltime_get_day(caltime_t t);
 int32_t caltime_get_month(caltime_t t);
 int32_t caltime_get_year(caltime_t t);
+caltime_t caltime_get_tomorrow(caltime_t t);
+int caltime_month_num_days(caltime_t t);
 #endif

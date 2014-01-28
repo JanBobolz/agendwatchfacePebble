@@ -43,16 +43,14 @@ bool cal_begins_before_tomorrow(CalendarEvent* event) {
 }
 
 bool cal_begins_tomorrow(CalendarEvent* event) {
-	return false; //TODO - code below crashes for some reason on Beta 6
-	/*time_t t = time(NULL);
-	struct tm *tomorrow = localtime(&t);
+	time_t t = time(NULL);
+	struct tm *today = localtime(&t);
 	
-	//Add a day to now and normalize...
+	/*//Add a day to now and normalize...
 	tomorrow->tm_mday++;
-	mktime(tomorrow);
+	mktime(tomorrow);*/ //Code crashes... 
 	
-	bool result = event->start_day == tomorrow->tm_mday && event->start_month == tomorrow->tm_mon+1 && event->start_year == tomorrow->tm_year+1900;
-	return result;*/
+	return caltime_get_tomorrow(tm_to_caltime_date_only(today)) == caltime_to_date_only(event->start_time);
 }
 
 bool cal_begins_later_day(CalendarEvent* before, CalendarEvent* after) { //true iff 'after' begins on a day later than 'before' begins. Compares only date, not time
@@ -94,4 +92,63 @@ int32_t caltime_get_month(caltime_t t) {
 
 int32_t caltime_get_year(caltime_t t) {
 	return (t/(60*24*7*32*12))+1900;
+}
+
+caltime_t caltime_get_tomorrow(const caltime_t time) { //gives a caltime_t for tomorrow relative to t (date only, no time)
+	caltime_t t = caltime_to_date_only(time); //normalize to get rid of time of day
+	
+	//Normalize day, month, and year if we're at the limits
+	if (caltime_get_day(t) == caltime_month_num_days(t)) {
+		t -= (caltime_get_day(t)-1)*60*24*7; //set day to one
+		
+		//Check if month overflows
+		if (caltime_get_month(t) == 12) {
+			t -= 60*24*7*32*11; //set month to January
+			t += 60*24*7*32*12; //increment year
+		}
+		else
+			t += 60*24*7*32; //increment month
+	}
+	else
+		t += 60*24*7; //increment day
+	
+	//Increment day of the week
+	if (caltime_get_weekday(t) == 6)
+		t -= 60*24*6;
+	else
+		t += 60*24;
+	
+	return t;
+}
+
+int caltime_month_num_days(caltime_t t) { //Returns the number of days of the current month
+	int year;
+	switch (caltime_get_month(t)) {
+		case 1:
+		case 3:
+		case 5:
+		case 7:
+		case 8:
+		case 10:
+		case 12:
+			return 31;
+		
+		case 4:
+		case 6:
+		case 9:
+		case 11:
+			return 30;
+				
+		case 2:
+			year = (int) caltime_get_year(t);
+			if (year%400 == 0)
+				return 29;
+			if (year%100 == 0)
+				return 28;
+			if (year%4 == 0)
+				return 29;
+			return 28;
+		default:
+			return 0;
+	}
 }

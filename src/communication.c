@@ -5,7 +5,7 @@
 #include <communication.h>
 
 //Version of the watchapp. Will be compared to what version the (updated) phone app expects
-#define WATCHAPP_VERSION 3
+#define WATCHAPP_VERSION 4
 	
 //Definitions of dictionary keys
 #define DICT_KEY_COMMAND 0
