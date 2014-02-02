@@ -417,7 +417,7 @@ void create_header(Layer *window_layer) {
 	}
 	
 	//Figure out font for the time
-	set_time_font_from_settings();
+	set_time_font_from_settings(); //also sets header_height etc.
 	
 	//Create time layer
 	text_layer_time = text_layer_create(GRect(0, 0, header_time_width, header_height));
@@ -521,7 +521,7 @@ void handle_deinit(void) {
 	//Write persistent data
 	persist_write_data(PERSIST_LAST_SYNC, &last_sync, sizeof(last_sync));
 	//event_db_persist(); //is persisted when new data arrives so this doesn't take so long here
-	settings_persist();
+	//settings_persist(); //is persisted when new settings arrive
 	
 	//Destroy last references
 	event_db_reset();

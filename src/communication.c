@@ -81,8 +81,8 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 			}
 			
 			//Apply settings from the message
-			settings_set_design(dict_find(received, DICT_KEY_SETTINGS_DESIGN)->value->uint32);
-			settings_set_bool_flags(dict_find(received, DICT_KEY_SETTINGS_BOOLFLAGS)->value->uint32);
+			settings_set(dict_find(received, DICT_KEY_SETTINGS_BOOLFLAGS)->value->uint32, 
+						 dict_find(received, DICT_KEY_SETTINGS_DESIGN)->value->uint32);
 			
 			//Begin heightened communication status (for faster sync, hopefully)
 			app_comm_set_sniff_interval(SNIFF_INTERVAL_REDUCED);

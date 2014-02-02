@@ -37,8 +37,7 @@ void settings_persist(); //saves settings to persistent storage.
 void settings_restore_persisted(); //restores settings from persistent storage (if exists)
 
 uint32_t settings_get_bool_flags(); //getter for general settings
-void settings_set_bool_flags(uint32_t flags);
 uint32_t settings_get_design(); //getter for design settings
-void settings_set_design(uint32_t design);
+void settings_set(uint32_t bool_flags, uint32_t design); //setter for both. Will callback to main.h and persist on changes
 
 #endif

@@ -23,17 +23,24 @@ uint32_t settings_get_bool_flags() { //getter for general settings (details in s
 	return boolean_flags;
 }
 
-void settings_set_bool_flags(uint32_t flags) {
+void settings_set(uint32_t flags, uint32_t design) { // Will callback to main.h and persist on changes
+	bool changed = false;
 	if (boolean_flags != flags) {
 		boolean_flags = flags;
+		changed = true;
+	}
+	
+	if (design != design_flags) {
+		design_flags = design;
+		changed = true;
+	}
+	
+	if (changed) {
 		handle_new_settings();
+		settings_persist();
 	}
 }
 
 uint32_t settings_get_design() { //getter for design settings (details in settings.h)
 	return design_flags;
-}
-
-void settings_set_design(uint32_t design) {
-	design_flags = design;
 }
