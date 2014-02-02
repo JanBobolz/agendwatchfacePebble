@@ -5,7 +5,9 @@
 #include <communication.h>
 
 //Version of the watchapp. Will be compared to what version the (updated) phone app expects
-#define WATCHAPP_VERSION 4
+#define WATCHAPP_VERSION 5
+#define BACKWARD_COMPAT_VERSION 4
+//BACKWARD_COMPAT_VERSION smallest version number that this version is backwards compatible to (so an Android app bundling that (older) version would still work)
 	
 //Definitions of dictionary keys
 #define DICT_KEY_COMMAND 0
@@ -21,6 +23,7 @@
 
 //Outgoing dictionary keys
 #define DICT_OUT_KEY_VERSION 0
+#define DICT_OUT_KEY_BACKWARDSVERSION 1
 
 //Commands from phone
 #define COMMAND_INIT_DATA 0
@@ -41,6 +44,8 @@ void send_sync_request() { //Sends a request for fresh data to the phone
 	app_message_outbox_begin(&iter);
 	Tuplet value = TupletInteger(DICT_OUT_KEY_VERSION, WATCHAPP_VERSION);
 	dict_write_tuplet(iter, &value);
+	Tuplet value2 = TupletInteger(DICT_OUT_KEY_BACKWARDSVERSION, BACKWARD_COMPAT_VERSION);
+	dict_write_tuplet(iter, &value2);
 	app_message_outbox_send();
 	sync_layer_set_progress(0,1);
 }
@@ -63,7 +68,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 		switch (command->value->uint8) {
 			case COMMAND_INIT_DATA: //First message (starting new sync, giving settings)
 			//Check version number
-			if (dict_find(received, DICT_KEY_VERSION)->value->uint8 != WATCHAPP_VERSION) {
+			if (dict_find(received, DICT_KEY_VERSION)->value->uint8 > WATCHAPP_VERSION) {
 				if (!update_request_sent) {
 					send_sync_request(); //make sure the phone knows about our mismatched version
 					update_request_sent = true; //do it only once
