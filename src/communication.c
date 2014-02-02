@@ -31,7 +31,7 @@
 CalendarEvent **buffer = 0; //buffered calendar events so far
 uint8_t number_received = 0; //number of events completely received
 uint8_t number_expected = 0; //number of events the phone said it will send
-bool expecting_event_time = 0; //if true, we expect the last received event's time (second message)
+bool expecting_event_time = 0; //if true, we expect the last received event's time now (second message)
 bool update_request_sent = 0; //whether or not we informed the phone about outdated version
 
 void send_sync_request() { //Sends a request for fresh data to the phone
@@ -41,6 +41,7 @@ void send_sync_request() { //Sends a request for fresh data to the phone
 	Tuplet value = TupletInteger(DICT_OUT_KEY_VERSION, WATCHAPP_VERSION);
 	dict_write_tuplet(iter, &value);
 	app_message_outbox_send();
+	sync_layer_set_progress(0,1);
 }
 
 void out_sent_handler(DictionaryIterator *sent, void *context) {
@@ -86,6 +87,9 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 			
 			//Begin heightened communication status (for faster sync, hopefully)
 			app_comm_set_sniff_interval(SNIFF_INTERVAL_REDUCED);
+			
+			//Show user
+			sync_layer_set_progress(number_received+1, number_expected+2);
 			break;
 			
 			case COMMAND_EVENT: //getting first half of an event
@@ -106,6 +110,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				//APP_LOG(APP_LOG_LEVEL_DEBUG, "Got event time data for %s", buffer[number_received]->title);
 				number_received++;
 				expecting_event_time = 0; //state: awaiting another first half (or done message)
+				sync_layer_set_progress(number_received+1, number_expected+2);
 			}
 			break;
 		
@@ -126,6 +131,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				expecting_event_time = 0;
 				
 				APP_LOG(APP_LOG_LEVEL_DEBUG, "Sync done");
+				sync_layer_set_progress(0,0);
 			}
 			app_comm_set_sniff_interval(SNIFF_INTERVAL_NORMAL); //stop heightened communcation
 			break;

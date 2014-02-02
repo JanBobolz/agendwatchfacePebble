@@ -4,4 +4,5 @@
 void handle_data_gone();
 void handle_new_data();
 void handle_new_settings();
+void sync_layer_set_progress(int now, int max);
 #endif

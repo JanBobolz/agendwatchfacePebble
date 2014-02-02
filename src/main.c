@@ -29,13 +29,24 @@ Window *window; //the watchface's only window
 TextLayer *text_layer_time = 0; //layer for the current time (if header enabled in settings)
 TextLayer *text_layer_date = 0; //layer for current date (if header enabled)
 TextLayer *text_layer_weekday = 0; //layer for current weekday (if header enabled)
+TextLayer *sync_indicator_layer = 0; //sync indicator
 
 GFont time_font = 0; //Font for current time (custom font)
-GFont date_font;
+GFont date_font; //Font for the current date (system font)
 int time_font_id = -1; //id of time_font according to Android settings (-1 being not loaded)
 int header_height = 0; //height of the header
 int header_time_width = 0; //width of the time layer
 int header_weekday_height = 0; //height of the weekday layer
+
+//Displays progress of synchronization in the layer (if displayed). Setting max == 0 is valid (then no sync bar)
+void sync_layer_set_progress(int now, int max) {
+	if (sync_indicator_layer == 0)
+		return;
+	
+	int width = max == 0 ? 144 : ((now*144)/max);
+	
+	layer_set_bounds(text_layer_get_layer(sync_indicator_layer), GRect(width,0,144-width,1));
+}
 
 //Set font variables (font, font_bold, line_height) according to settings
 void set_font_from_settings() {
@@ -379,19 +390,27 @@ static void handle_time_tick(struct tm *tick_time, TimeUnits units_changed) { //
 void set_time_font_from_settings() {
 	int time_font_id_new = (int) ((settings_get_bool_flags() & (SETTINGS_BOOL_HEADER_SIZE0|SETTINGS_BOOL_HEADER_SIZE1))/SETTINGS_BOOL_HEADER_SIZE0); //figure out index of the font from settings (two-bit number)
 	
-	if (time_font_id_new == time_font_id) //then we're already done
-		return;
+	if (time_font_id_new != time_font_id) {
+		//Unload previous font
+		if (time_font != 0)
+			fonts_unload_custom_font(time_font);
+		
+		//Apply new font
+		time_font_id = time_font_id_new;
+		switch (time_font_id) {
+			case 1: //big time
+				time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ROBOTO_CONDENSED_BOLD_38));
+				break;
+			case 0:
+			default:
+				time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ROBOTO_CONDENSED_30));
+				break;
+		}
+	}
 	
-	//Unload previous font
-	if (time_font != 0)
-		fonts_unload_custom_font(time_font);
-	
-	//Apply new font and set constants
-	time_font_id = time_font_id_new;
-	
+	//Apply other settings
 	switch (time_font_id) {
 		case 1: //big time/header
-			time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ROBOTO_CONDENSED_BOLD_38));
 			date_font = fonts_get_system_font(FONT_KEY_GOTHIC_18);
 			header_weekday_height = 18;
 			header_height = 48;
@@ -400,7 +419,6 @@ void set_time_font_from_settings() {
 		
 		case 0: //small time/header
 		default:
-			time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ROBOTO_CONDENSED_30));
 			date_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
 			header_weekday_height = 16;
 			header_height = 40;
@@ -446,6 +464,12 @@ void create_header(Layer *window_layer) {
 	update_clock();
 	time_t t = time(NULL);
 	update_date(localtime(&t));
+	
+	//Create sync indicator
+	sync_indicator_layer = text_layer_create(GRect(0,0,144,1));
+	text_layer_set_background_color(sync_indicator_layer, GColorWhite);
+	layer_add_child(window_layer, text_layer_get_layer(sync_indicator_layer));
+	layer_set_bounds(text_layer_get_layer(sync_indicator_layer), GRect(0,0,0,0)); //relative to own frame
 }
 
 //Well... Destroys whatever create_header() created...
@@ -453,10 +477,12 @@ void destroy_header() {
 	if (text_layer_time != 0) text_layer_destroy(text_layer_time);
 	if (text_layer_date != 0) text_layer_destroy(text_layer_date);
 	if (text_layer_weekday != 0) text_layer_destroy(text_layer_weekday);
+	if (sync_indicator_layer != 0) text_layer_destroy(sync_indicator_layer);
 	
 	text_layer_time = 0;
 	text_layer_date = 0;
 	text_layer_weekday = 0;	
+	sync_indicator_layer = 0;
 }
 
 //Callback if settings changed (also called in handle_init()). We'll simply destroy everything, recreate the header if still set to. Calendar data will be shown again after sync is done
