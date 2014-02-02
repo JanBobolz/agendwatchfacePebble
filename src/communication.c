@@ -29,6 +29,7 @@
 #define COMMAND_EVENT_TIME 3
 
 CalendarEvent **buffer = 0; //buffered calendar events so far
+uint8_t buffer_size = 0; //number of elements in the buffer (for cleanup)
 uint8_t number_received = 0; //number of events completely received
 uint8_t number_expected = 0; //number of events the phone said it will send
 bool expecting_event_time = 0; //if true, we expect the last received event's time now (second message)
@@ -77,6 +78,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 			if (number_expected != 0) {
 				//init buffer
 				number_received = 0;
+				buffer_size = 0;
 				buffer = malloc(sizeof(CalendarEvent*)*number_expected);
 				APP_LOG(APP_LOG_LEVEL_DEBUG, "Starting sync. Expecting %d events", (int) number_expected);
 			}
@@ -96,6 +98,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 			if (number_expected-number_received != 0 && number_expected != 0 && !expecting_event_time) { //check if message is expected
 				//APP_LOG(APP_LOG_LEVEL_DEBUG, "Got event %s. Start time: %lu", dict_find(received, DICT_KEY_TITLE)->value->cstring, dict_find(received, 147851)->value->uint32);				
 				buffer[number_received] = create_calendar_event();
+				buffer_size++;
 				cal_set_title_and_loc(buffer[number_received], dict_find(received, DICT_KEY_TITLE)->value->cstring, dict_find(received, DICT_KEY_LOCATION)->value->cstring);
 				cal_set_allday(buffer[number_received], dict_find(received, DICT_KEY_ALLDAY)->value->uint8 ? 1 : 0);				
 				expecting_event_time = 1; //state now: waiting for second half
@@ -126,6 +129,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				
 				//Reset to begin again
 				free(buffer);
+				buffer_size = 0;
 				number_expected = 0;
 				number_received = 0;
 				expecting_event_time = 0;
@@ -146,10 +150,11 @@ void in_dropped_handler(AppMessageResult reason, void *context) { //incoming mes
 
 void communication_cleanup() { //reset everything to start state (also cleans up malloc'ed memory)
 	if (number_expected != 0) {
-		for (int i=0;i<number_received;i++)
+		for (int i=0;i<buffer_size;i++)
 			free(buffer[i]);
 		free(buffer);
 		
+		buffer_size = 0;
 		number_expected = 0;
 		number_received = 0;
 		expecting_event_time = 0;
