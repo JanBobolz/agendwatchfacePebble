@@ -15,6 +15,12 @@
     "resources": {
         "media": [
             {
+                "menuIcon": true,
+                "type": "png",
+                "name": "IMAGE_ICON",
+                "file": "images/watch_icon.png"
+            },
+            {
                 "characterRegex": "[0-9 :]",
                 "type": "font",
                 "name": "FONT_ROBOTO_CONDENSED_BOLD_38",

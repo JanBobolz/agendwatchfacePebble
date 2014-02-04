@@ -429,45 +429,46 @@ void set_time_font_from_settings() {
 
 //Create the header that shows current time and date (if settings say so)
 void create_header(Layer *window_layer) {
-	if (!(settings_get_bool_flags() & SETTINGS_BOOL_SHOW_CLOCK_HEADER)) {
-		header_height = 0;
-		return;
+	if (!(settings_get_bool_flags() & SETTINGS_BOOL_SHOW_CLOCK_HEADER)) { //stop creating here if user settings permit
+		header_height = 2;
+	} 
+	else {
+		//Figure out font for the time
+		set_time_font_from_settings(); //also sets header_height etc.
+		
+		//Create time layer
+		text_layer_time = text_layer_create(GRect(0, 0, header_time_width, header_height));
+		text_layer_set_background_color(text_layer_time, GColorBlack);
+		text_layer_set_text_color(text_layer_time, GColorWhite);
+		text_layer_set_font(text_layer_time, time_font);
+		layer_add_child(window_layer, text_layer_get_layer(text_layer_time));
+		
+		//Create date layer
+		text_layer_date = text_layer_create(GRect(header_time_width, header_weekday_height, 144-header_time_width, header_height-header_weekday_height));
+		text_layer_set_background_color(text_layer_date, GColorBlack);
+		text_layer_set_text_color(text_layer_date, GColorWhite);
+		text_layer_set_text_alignment(text_layer_date, GTextAlignmentRight);
+		text_layer_set_font(text_layer_date, date_font);
+		layer_add_child(window_layer, text_layer_get_layer(text_layer_date));
+		
+		//Create weekday layer
+		text_layer_weekday = text_layer_create(GRect(header_time_width, 0, 144-header_time_width, header_weekday_height));
+		text_layer_set_background_color(text_layer_weekday, GColorBlack);
+		text_layer_set_text_color(text_layer_weekday, GColorWhite);
+		text_layer_set_text_alignment(text_layer_weekday, GTextAlignmentRight);
+		text_layer_set_font(text_layer_weekday, date_font);
+		layer_add_child(window_layer, text_layer_get_layer(text_layer_weekday));
+		
+		//Show initial values
+		update_clock();
+		time_t t = time(NULL);
+		update_date(localtime(&t));
 	}
-	
-	//Figure out font for the time
-	set_time_font_from_settings(); //also sets header_height etc.
-	
-	//Create time layer
-	text_layer_time = text_layer_create(GRect(0, 0, header_time_width, header_height));
-	text_layer_set_background_color(text_layer_time, GColorBlack);
-	text_layer_set_text_color(text_layer_time, GColorWhite);
-	text_layer_set_font(text_layer_time, time_font);
-	layer_add_child(window_layer, text_layer_get_layer(text_layer_time));
-	
-	//Create date layer
-	text_layer_date = text_layer_create(GRect(header_time_width, header_weekday_height, 144-header_time_width, header_height-header_weekday_height));
-	text_layer_set_background_color(text_layer_date, GColorBlack);
-	text_layer_set_text_color(text_layer_date, GColorWhite);
-	text_layer_set_text_alignment(text_layer_date, GTextAlignmentRight);
-	text_layer_set_font(text_layer_date, date_font);
-	layer_add_child(window_layer, text_layer_get_layer(text_layer_date));
-	
-	//Create weekday layer
-	text_layer_weekday = text_layer_create(GRect(header_time_width, 0, 144-header_time_width, header_weekday_height));
-	text_layer_set_background_color(text_layer_weekday, GColorBlack);
-	text_layer_set_text_color(text_layer_weekday, GColorWhite);
-	text_layer_set_text_alignment(text_layer_weekday, GTextAlignmentRight);
-	text_layer_set_font(text_layer_weekday, date_font);
-	layer_add_child(window_layer, text_layer_get_layer(text_layer_weekday));
-	
-	//Show initial values
-	update_clock();
-	time_t t = time(NULL);
-	update_date(localtime(&t));
 	
 	//Create sync indicator
 	sync_indicator_layer = text_layer_create(GRect(0,0,144,1));
 	text_layer_set_background_color(sync_indicator_layer, GColorWhite);
+	layer_add_child(window_layer, text_layer_get_layer(sync_indicator_layer));
 	layer_add_child(window_layer, text_layer_get_layer(sync_indicator_layer));
 	layer_set_bounds(text_layer_get_layer(sync_indicator_layer), GRect(0,0,0,0)); //relative to own frame
 }
