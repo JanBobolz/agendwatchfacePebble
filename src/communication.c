@@ -5,7 +5,7 @@
 #include <communication.h>
 
 //Version of the watchapp. Will be compared to what version the (updated) phone app expects
-#define WATCHAPP_VERSION 5
+#define WATCHAPP_VERSION 6
 #define BACKWARD_COMPAT_VERSION 4
 //BACKWARD_COMPAT_VERSION smallest version number that this version is backwards compatible to (so an Android app bundling that (older) version would still work)
 	
@@ -85,18 +85,25 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				number_received = 0;
 				buffer_size = 0;
 				buffer = malloc(sizeof(CalendarEvent*)*number_expected);
+				
 				APP_LOG(APP_LOG_LEVEL_DEBUG, "Starting sync. Expecting %d events", (int) number_expected);
+
+				//Begin heightened communication status (for faster sync, hopefully)
+				app_comm_set_sniff_interval(SNIFF_INTERVAL_REDUCED);
+			
+				//Show user
+				sync_layer_set_progress(number_received+1, number_expected+2);
+			} else {
+				APP_LOG(APP_LOG_LEVEL_DEBUG, "Phone does not have any events to send");
+				sync_layer_set_progress(0,0);
+				handle_data_gone();
+				event_db_reset();
+				handle_new_data();
 			}
 			
 			//Apply settings from the message
 			settings_set(dict_find(received, DICT_KEY_SETTINGS_BOOLFLAGS)->value->uint32, 
 						 dict_find(received, DICT_KEY_SETTINGS_DESIGN)->value->uint32);
-			
-			//Begin heightened communication status (for faster sync, hopefully)
-			app_comm_set_sniff_interval(SNIFF_INTERVAL_REDUCED);
-			
-			//Show user
-			sync_layer_set_progress(number_received+1, number_expected+2);
 			break;
 			
 			case COMMAND_EVENT: //getting first half of an event

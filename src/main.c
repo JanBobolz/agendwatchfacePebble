@@ -373,8 +373,8 @@ static void handle_time_tick(struct tm *tick_time, TimeUnits units_changed) { //
 	if (units_changed & DAY_UNIT)
 		update_date(tick_time);
 	
-	//check whether we should try for an update (if connected and last sync was more than 30 minutes ago)
-	if (bluetooth_connection_service_peek() && time(NULL)-last_sync > 60*30)
+	//check whether we should try for an update (if connected and last sync was more than 30 minutes ago). Also when time went backward (time zoning)
+	if (bluetooth_connection_service_peek() && (time(NULL)-last_sync > 60*30 || time(NULL) < last_sync))
 		send_sync_request();
 	
 	//check whether we crossed the refresh_at threshold (e.g., event finished and has to be removed. Or event starts and now has to show endtime...)
