@@ -149,6 +149,10 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				APP_LOG(APP_LOG_LEVEL_DEBUG, "Sync done");
 				sync_layer_set_progress(0,0);
 			}
+			else {//phone thinks it's done but at some point, we began ignoring (yet ack'ing) its messages. So we request a restart
+				send_sync_request();
+				APP_LOG(APP_LOG_LEVEL_DEBUG, "Phone finished sync but something went wrong - requesting restart");
+			}
 			app_comm_set_sniff_interval(SNIFF_INTERVAL_NORMAL); //stop heightened communcation
 			break;
 		}
