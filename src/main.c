@@ -9,6 +9,7 @@ time_t last_sync = 0; //time where the last successful sync happened
 caltime_t refresh_at = 0; //time where the event display should be refreshed next (actually, refresh will happen if this threshold lays in the past (so, next minute))
 
 int num_events = 0; //number of events displayed. As many elements will be in the arrays below (an element may also be 0)
+int elapsed_event_num = 0; //number of elapsed events skipped during last refresh
 TextLayer **event_text1 = 0; //row one texts
 TextLayer **event_text2 = 0; //row two texts
 TextLayer **event_time1 = 0; //row one times
@@ -252,6 +253,7 @@ void display_cal_data() { //(Re-)creates all the layers for the events in the da
 	
 	//Iterate over calendar events
 	num_events = 0;
+	elapsed_event_num = 0;
 	num_separators = 0;
 	refresh_at = 0; //contains the earliest time that we need to schedule a refresh for
 	CalendarEvent *previous_event = 0; //contains the event from previous loop iteration (or 0)
@@ -260,8 +262,10 @@ void display_cal_data() { //(Re-)creates all the layers for the events in the da
 
 	for (int i=0;i<event_db_size()&&y<168;i++) {
 		CalendarEvent* event = event_db_get(i);
-		if (!should_be_displayed(event)) //skip those that we shouldn't display
+		if (!should_be_displayed(event)) { //skip those that we shouldn't display
+			elapsed_event_num++;
 			continue;
+		}
 				
 		//Check if we need a date separator
 		if ((previous_event == 0 && !cal_begins_before_tomorrow(event)) || (previous_event != 0 && cal_begins_later_day(previous_event, event) && !cal_begins_before_tomorrow(event))) {
@@ -381,8 +385,8 @@ static void handle_time_tick(struct tm *tick_time, TimeUnits units_changed) { //
 	if (units_changed & DAY_UNIT)
 		update_date(tick_time);
 	
-	//check whether we should try for an update (if connected and last sync was more than 30 minutes ago). Also when time went backward (time zoning)
-	if (bluetooth_connection_service_peek() && (time(NULL)-last_sync > 60*30 || time(NULL) < last_sync))
+	//check whether we should try for an update (if connected and last sync was more than (30-10*elapsed_event_num) minutes ago). Also when time went backward (time zoning)
+	if (bluetooth_connection_service_peek() && (time(NULL)-last_sync > 60*30-60*10*elapsed_event_num || time(NULL) < last_sync))
 		send_sync_request();
 	
 	//check whether we crossed the refresh_at threshold (e.g., event finished and has to be removed. Or event starts and now has to show endtime...)
@@ -509,8 +513,11 @@ void handle_init(void) {
  	window_set_background_color(window, GColorBlack);
 	
 	//Read persistent data
-	if (persist_exists(PERSIST_LAST_SYNC)) 
+	if (persist_exists(PERSIST_LAST_SYNC)) {
 		persist_read_data(PERSIST_LAST_SYNC, &last_sync, sizeof(last_sync));
+		if (time(NULL)-last_sync > 60*15) //force sync more often (not too often) if the watchface was left in the meantime...
+			last_sync = 0;
+	}
 	else
 		last_sync = 0;
 	event_db_restore_persisted();
