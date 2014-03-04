@@ -38,6 +38,11 @@ int header_height = 0; //height of the header
 int header_time_width = 0; //width of the time layer
 int header_weekday_height = 0; //height of the weekday layer
 
+caltime_t get_current_time() { //shortcut to get current caltime_t
+	time_t t = time(NULL);
+	return tm_to_caltime(localtime(&t));
+}
+
 //Displays progress of synchronization in the layer (if displayed). Setting max == 0 is valid (then no sync bar)
 void sync_layer_set_progress(int now, int max) {
 	if (sync_indicator_layer == 0)
@@ -94,15 +99,23 @@ void time_to_showstring(char* buffer, size_t buffersize, caltime_t time, bool ho
 	if (prepend_dash) {
 		buffer[0] = '-';
 		buffersize--;
-		buffer++;
+		buffer++; //advance pointer by the byte we just added
 	}
 	
-	if (hour_12) {
-		int hour = (int) caltime_get_hour(time);
-		snprintf(buffer, buffersize, append_am_pm ? (hour < 12 ? "%d:%02dam" : "%d:%02dpm") : "%d:%02d", hour % 12 == 0 ? 12 : hour % 12, (int) caltime_get_minute(time));
+	//Catch times that are not today, show their date instead
+	if (caltime_to_date_only(get_current_time()) != caltime_to_date_only(time)) {
+		static char *daystrings[7] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+		snprintf(buffer, buffersize, "%s", daystrings[caltime_get_weekday(time)]);
 	}
-	else
-		snprintf(buffer, buffersize, append_am_pm ? (caltime_get_hour(time) <= 12 ? "%02ld:%02ldam" : "%02ld:%02ldpm") : "%02ld:%02ld", caltime_get_hour(time), caltime_get_minute(time));
+	else {
+		//Show "regular" time
+		if (hour_12) {
+			int hour = (int) caltime_get_hour(time);
+			snprintf(buffer, buffersize, append_am_pm ? (hour < 12 ? "%d:%02dam" : "%d:%02dpm") : "%d:%02d", hour % 12 == 0 ? 12 : hour % 12, (int) caltime_get_minute(time));
+		}
+		else
+			snprintf(buffer, buffersize, append_am_pm ? (caltime_get_hour(time) <= 12 ? "%02ld:%02ldam" : "%02ld:%02ldpm") : "%02ld:%02ld", caltime_get_hour(time), caltime_get_minute(time));
+	}
 }
 
 //Creates the necessary layers for an event. Returns y+[height that the new layers take]. Every event has up to two rows, both consisting of a time and a text portion (either may be empty)
@@ -216,11 +229,6 @@ int create_day_separator_layer(int i, int y, Layer* parent, CalendarEvent* event
 	return y+line_height;
 }
 
-caltime_t get_current_time() { //shortcut to get current caltime_t
-	time_t t = time(NULL);
-	return tm_to_caltime(localtime(&t));
-}
-
 bool should_be_displayed(CalendarEvent* event) { //predicate for a calendar event. true iff event has not ended yet
 	return event->end_time >= get_current_time();
 }
@@ -256,7 +264,7 @@ void display_cal_data() { //(Re-)creates all the layers for the events in the da
 			continue;
 				
 		//Check if we need a date separator
-		if ((previous_event == 0 && !cal_begins_before_tomorrow(event)) || (previous_event != 0 && cal_begins_later_day(previous_event, event))) {
+		if ((previous_event == 0 && !cal_begins_before_tomorrow(event)) || (previous_event != 0 && cal_begins_later_day(previous_event, event) && !cal_begins_before_tomorrow(event))) {
 			y = create_day_separator_layer(num_separators, y, window_layer, event);
 			num_separators++;
 		}
