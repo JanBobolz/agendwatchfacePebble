@@ -5,7 +5,7 @@
 #include <communication.h>
 
 //Version of the watchapp. Will be compared to what version the (updated) phone app expects
-#define WATCHAPP_VERSION 6
+#define WATCHAPP_VERSION 7
 #define BACKWARD_COMPAT_VERSION 4
 //BACKWARD_COMPAT_VERSION smallest version number that this version is backwards compatible to (so an Android app bundling that (older) version would still work)
 	
@@ -86,7 +86,9 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				communication_cleanup();
 			}
 			number_expected = dict_find(received, DICT_KEY_NUM_EVENTS)->value->uint8;
-			current_sync_id = dict_find(received, DICT_KEY_SYNC_ID)->value->uint8;
+			Tuple* sync_id_tuple = dict_find(received, DICT_KEY_SYNC_ID);
+			if (sync_id_tuple != NULL)
+				current_sync_id = sync_id_tuple->value->uint8;
 			APP_LOG(APP_LOG_LEVEL_DEBUG, "starting with sync id %d", current_sync_id);
 			if (number_expected != 0) {
 				//init buffer

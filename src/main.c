@@ -458,7 +458,7 @@ void set_time_font_from_settings() {
 void create_header(Layer *window_layer) {
 	if (!(settings_get_bool_flags() & SETTINGS_BOOL_SHOW_CLOCK_HEADER)) { //stop creating here if user settings permit
 		header_height = 2;
-	} 
+	}
 	else {
 		//Figure out font for the time
 		set_time_font_from_settings(); //also sets header_height etc.
