@@ -33,6 +33,7 @@
 #define COMMAND_DONE 2
 #define COMMAND_EVENT_TIME 3
 #define COMMAND_NO_NEW_DATA 4
+#define COMMAND_FORCE_REQUEST 5
 
 CalendarEvent **buffer = 0; //buffered calendar events so far
 uint8_t buffer_size = 0; //number of elements in the buffer (for cleanup)
@@ -59,7 +60,6 @@ void send_sync_request(uint8_t report_sync_id) { //Sends a request for fresh dat
 void out_sent_handler(DictionaryIterator *sent, void *context) {
 	// outgoing message was delivered
 }
-
 
 void out_failed_handler(DictionaryIterator *failed, AppMessageResult reason, void *context) {
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "Sending failed for reason %d", reason);
@@ -169,6 +169,11 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				APP_LOG(APP_LOG_LEVEL_DEBUG, "Phone finished sync but something went wrong - requesting restart");
 			}
 			app_comm_set_sniff_interval(SNIFF_INTERVAL_NORMAL); //stop heightened communcation
+			break;
+			
+			case COMMAND_FORCE_REQUEST: //the phone wants us to request an update (so that we report our version, etc.)
+			APP_LOG(APP_LOG_LEVEL_DEBUG, "Got FORCE_REQUEST");
+			send_sync_request(0);
 			break;
 		}
 	}
