@@ -116,6 +116,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 			
 			case COMMAND_NO_NEW_DATA: //phone informs us that our data is up-to-date
 				sync_layer_set_progress(0,0);
+				handle_no_new_data();
 			break;
 			
 			case COMMAND_EVENT: //getting first half of an event

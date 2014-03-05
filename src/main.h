@@ -3,6 +3,7 @@
 
 void handle_data_gone();
 void handle_new_data(uint8_t sync_id);
+void handle_no_new_data();
 void handle_new_settings();
 void sync_layer_set_progress(int now, int max);
 #endif

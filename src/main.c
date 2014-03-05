@@ -96,20 +96,20 @@ int get_event_text_offset(uint8_t design_time, uint8_t number_of_times, bool app
 	return result;
 }
 
-//Create a string from time that can be shown to the user according to settings
-void time_to_showstring(char* buffer, size_t buffersize, caltime_t time, bool hour_12, bool append_am_pm, bool prepend_dash) {
+//Create a string from time that can be shown to the user according to settings. relative_to contains the date that the user expects to see (to determine whether to display time or day)
+void time_to_showstring(char* buffer, size_t buffersize, caltime_t time, caltime_t relative_to, bool hour_12, bool append_am_pm, bool prepend_dash) {
 	if (prepend_dash) {
 		buffer[0] = '-';
 		buffersize--;
 		buffer++; //advance pointer by the byte we just added
 	}
 	
-	//Catch times that are not today, show their date instead
-	if (caltime_to_date_only(get_current_time()) != caltime_to_date_only(time)) {
+	//Catch times that are not on relative_to, show their date instead
+	if (caltime_to_date_only(relative_to) != caltime_to_date_only(time)) {
 		static char *daystrings[7] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
 		snprintf(buffer, buffersize, "%s", daystrings[caltime_get_weekday(time)]);
 	}
-	else {
+	else { //TODO: write another case (close to 'relative to' (and if setting. And if today, 'else if' hence)) and compute relative time, which is easy on the same day. Display sth like "5min" for it.
 		//Show "regular" time
 		if (hour_12) {
 			int hour = (int) caltime_get_hour(time);
@@ -121,7 +121,7 @@ void time_to_showstring(char* buffer, size_t buffersize, caltime_t time, bool ho
 }
 
 //Creates the necessary layers for an event. Returns y+[height that the new layers take]. Every event has up to two rows, both consisting of a time and a text portion (either may be empty)
-int create_event_layers(int i, int y, Layer* parent, CalendarEvent* event) {
+int create_event_layers(int i, int y, Layer* parent, CalendarEvent* event, caltime_t relative_to) {
 	//Get settings
 	uint32_t design = settings_get_design();
 	uint32_t settings = settings_get_bool_flags();
@@ -159,9 +159,9 @@ int create_event_layers(int i, int y, Layer* parent, CalendarEvent* event) {
 					time_to_show = event->end_time;
 			}
 			
-			time_to_showstring(event_texts[i*4+row*2], 20, time_to_show, settings & SETTINGS_BOOL_12H ? 1 : 0,(settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0, time_to_show == event->end_time ? 1 : 0);
+			time_to_showstring(event_texts[i*4+row*2], 20, time_to_show, relative_to, settings & SETTINGS_BOOL_12H ? 1 : 0,(settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0, time_to_show == event->end_time ? 1 : 0);
 			if (design_time == 3) //we should show start and end time. So we append the end time
-				time_to_showstring(event_texts[i*4+row*2]+strlen(event_texts[i*4+row*2]), 10, event->end_time, settings & SETTINGS_BOOL_12H ? 1 : 0, (settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0, true);
+				time_to_showstring(event_texts[i*4+row*2]+strlen(event_texts[i*4+row*2]), 10, event->end_time, relative_to, settings & SETTINGS_BOOL_12H ? 1 : 0, (settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0, true);
 		}
 		else
 			event_texts[i*4+row*2] = 0;
@@ -260,6 +260,7 @@ void display_cal_data() { //(Re-)creates all the layers for the events in the da
 	CalendarEvent *previous_event = 0; //contains the event from previous loop iteration (or 0)
 	int y = header_height; //vertical offset to start displaying layers
 	caltime_t now = get_current_time();
+	caltime_t last_separator_date = now; //the date (time portion should be ignored) of the last day separator (so that times can be shown relative to that)
 
 	for (int i=0;i<event_db_size()&&y<168;i++) {
 		CalendarEvent* event = event_db_get(i);
@@ -271,11 +272,12 @@ void display_cal_data() { //(Re-)creates all the layers for the events in the da
 		//Check if we need a date separator
 		if ((previous_event == 0 && !cal_begins_before_tomorrow(event)) || (previous_event != 0 && cal_begins_later_day(previous_event, event) && !cal_begins_before_tomorrow(event))) {
 			y = create_day_separator_layer(num_separators, y, window_layer, event);
+			last_separator_date = event->start_time;
 			num_separators++;
 		}
 		
 		//Add event layers
-		y = create_event_layers(num_events, y, window_layer, event)+1;
+		y = create_event_layers(num_events, y, window_layer, event, last_separator_date)+1;
 		num_events++;
 		
 		//Schedule refresh for when the event starts or ends
@@ -334,11 +336,17 @@ void remove_cal_data() { //tidies up anything in the event_layer_... arrays
 	day_separator_texts = 0;
 }
 
+void handle_no_new_data() { //sync done, no new data
+	last_sync = time(NULL);
+}
+
 void handle_new_data(uint8_t sync_id) { //Sync done. Show new data from database
 	display_cal_data(); //Create the event layers etc.
+	
 	last_sync = time(NULL); //remember successful sync
 	last_sync_id = sync_id;
 	persist_write_data(PERSIST_LAST_SYNC_ID, &last_sync_id, sizeof(last_sync_id));
+	
 	event_db_persist(); //save database persistently
 }
 
