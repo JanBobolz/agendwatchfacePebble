@@ -96,8 +96,8 @@ int get_event_text_offset(uint8_t design_time, uint8_t number_of_times, bool app
 	return result;
 }
 
-//Create a string from time that can be shown to the user according to settings. relative_to contains the date that the user expects to see (to determine whether to display time or day)
-void time_to_showstring(char* buffer, size_t buffersize, caltime_t time, caltime_t relative_to, bool hour_12, bool append_am_pm, bool prepend_dash) {
+//Create a string from time that can be shown to the user according to settings. relative_to contains the date that the user expects to see (to determine whether to display time or day). If relative_time is true, then the function may print remaining minutes to relative_to.
+void time_to_showstring(char* buffer, size_t buffersize, caltime_t time, caltime_t relative_to, bool relative_time, bool hour_12, bool append_am_pm, bool prepend_dash) {
 	if (prepend_dash) {
 		buffer[0] = '-';
 		buffersize--;
@@ -105,12 +105,15 @@ void time_to_showstring(char* buffer, size_t buffersize, caltime_t time, caltime
 	}
 	
 	//Catch times that are not on relative_to, show their date instead
-	if (caltime_to_date_only(relative_to) != caltime_to_date_only(time)) {
+	if (caltime_to_date_only(relative_to) != caltime_to_date_only(time)) { //show weekday instead of time
 		static char *daystrings[7] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
 		snprintf(buffer, buffersize, "%s", daystrings[caltime_get_weekday(time)]);
+	} 
+	else if (relative_time && time>=relative_to && time-relative_to <= 60) { //show relative time ("in 5 minutes")
+		snprintf(buffer, buffersize, "%dmin", (int) (time-relative_to));
+		refresh_at = 1; //force refresh next minute tick
 	}
-	else { //TODO: write another case (close to 'relative to' (and if setting. And if today, 'else if' hence)) and compute relative time, which is easy on the same day. Display sth like "5min" for it.
-		//Show "regular" time
+	else { //Show "regular" time
 		if (hour_12) {
 			int hour = (int) caltime_get_hour(time);
 			snprintf(buffer, buffersize, append_am_pm ? (hour < 12 ? "%d:%02dam" : "%d:%02dpm") : "%d:%02d", hour % 12 == 0 ? 12 : hour % 12, (int) caltime_get_minute(time));
@@ -121,7 +124,7 @@ void time_to_showstring(char* buffer, size_t buffersize, caltime_t time, caltime
 }
 
 //Creates the necessary layers for an event. Returns y+[height that the new layers take]. Every event has up to two rows, both consisting of a time and a text portion (either may be empty)
-int create_event_layers(int i, int y, Layer* parent, CalendarEvent* event, caltime_t relative_to) {
+int create_event_layers(int i, int y, Layer* parent, CalendarEvent* event, caltime_t relative_to, bool relative_time) { //relative_to and relative_time as used in time_to_showstring(...)
 	//Get settings
 	uint32_t design = settings_get_design();
 	uint32_t settings = settings_get_bool_flags();
@@ -145,7 +148,6 @@ int create_event_layers(int i, int y, Layer* parent, CalendarEvent* event, calti
 		uint8_t design_time = row == 0 ? design%0x10 : (design/0x100)%0x10; //results in two-bit number corresponding to appropriate design for the time (constants as in Android app)
 		uint8_t design_text = row == 0 ? (design/0x10)%0x10 : (design/0x1000)%0x10; //results in two-bit number corresponding to appropriate design for the text (constants as in Android app)
 		
-		
 		//Figure out texts for this row
 		if (design_time != 0) { //should we show any time at all?
 			event_texts[i*4+row*2] = malloc(20*sizeof(char));
@@ -153,15 +155,13 @@ int create_event_layers(int i, int y, Layer* parent, CalendarEvent* event, calti
 			//figure out whether to display start or end time
 			caltime_t time_to_show = design_time == 2 ? event->end_time : event->start_time; 
 			if (design_time == 4) { //Settings say we should show end_time rather than start time iff event has started
-				time_t now_time = time(NULL);
-				struct tm *now = localtime(&now_time);
-				if (tm_to_caltime(now) >= event->start_time)
+				if (get_current_time() >= event->start_time)
 					time_to_show = event->end_time;
 			}
 			
-			time_to_showstring(event_texts[i*4+row*2], 20, time_to_show, relative_to, settings & SETTINGS_BOOL_12H ? 1 : 0,(settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0, time_to_show == event->end_time ? 1 : 0);
+			time_to_showstring(event_texts[i*4+row*2], 20, time_to_show, relative_to, relative_time, settings & SETTINGS_BOOL_12H ? 1 : 0,(settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0, time_to_show == event->end_time ? 1 : 0);
 			if (design_time == 3) //we should show start and end time. So we append the end time
-				time_to_showstring(event_texts[i*4+row*2]+strlen(event_texts[i*4+row*2]), 10, event->end_time, relative_to, settings & SETTINGS_BOOL_12H ? 1 : 0, (settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0, true);
+				time_to_showstring(event_texts[i*4+row*2]+strlen(event_texts[i*4+row*2]), 10, event->end_time, relative_to, relative_time && get_current_time() >= event->start_time, settings & SETTINGS_BOOL_12H ? 1 : 0, (settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0, true);
 		}
 		else
 			event_texts[i*4+row*2] = 0;
@@ -277,7 +277,7 @@ void display_cal_data() { //(Re-)creates all the layers for the events in the da
 		}
 		
 		//Add event layers
-		y = create_event_layers(num_events, y, window_layer, event, last_separator_date)+1;
+		y = create_event_layers(num_events, y, window_layer, event, last_separator_date, num_separators == 0 && (settings_get_bool_flags() & SETTINGS_BOOL_COUNTDOWNS))+1;
 		num_events++;
 		
 		//Schedule refresh for when the event starts or ends
@@ -288,6 +288,10 @@ void display_cal_data() { //(Re-)creates all the layers for the events in the da
 		
 		previous_event = event;
 	}
+	
+	//Adjust refresh_at for countdown functionality. The other adjustment (for when a countdown is currently active) happens in the time_to_showstring() function
+	if ((settings_get_bool_flags() & SETTINGS_BOOL_COUNTDOWNS) && refresh_at != 0 && refresh_at % 60*60 >=60)
+		refresh_at -= 60; //so that we can begin the countdown there
 }
 
 void remove_cal_data() { //tidies up anything in the event_layer_... arrays
@@ -401,7 +405,7 @@ static void handle_time_tick(struct tm *tick_time, TimeUnits units_changed) { //
 		send_sync_request(last_sync_id);
 	
 	//check whether we crossed the refresh_at threshold (e.g., event finished and has to be removed. Or event starts and now has to show endtime...)
-	if ((tick_time->tm_hour == 0 && tick_time->tm_min == 1) || (refresh_at != 0 && tm_to_caltime(tick_time) > refresh_at)) {
+	if ((tick_time->tm_hour == 0 && tick_time->tm_min == 1) || (refresh_at != 0 && tm_to_caltime(tick_time) >= refresh_at)) {
 		APP_LOG(APP_LOG_LEVEL_DEBUG, "Refreshing currently shown events");
 		//Reset what's displayed and redisplay
 		remove_cal_data();

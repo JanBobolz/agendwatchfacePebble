@@ -33,6 +33,9 @@
 //Whether or not to show the date in the separator layers
 #define SETTINGS_BOOL_SEPARATOR_DATE 0x200
 	
+//Whether or not to display the remaining minutes instead of the time in events
+#define SETTINGS_BOOL_COUNTDOWNS 0x400
+	
 void settings_persist(); //saves settings to persistent storage.
 void settings_restore_persisted(); //restores settings from persistent storage (if exists)
 
