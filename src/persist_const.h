@@ -6,6 +6,7 @@
 
 //Last sync
 #define PERSIST_LAST_SYNC 0
+#define PERSIST_LAST_SYNC_ID 1
 
 //Settings
 #define PERSIST_BOOL_FLAG_SETTINGS 0x11001

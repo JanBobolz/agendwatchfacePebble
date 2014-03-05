@@ -12,6 +12,7 @@
 //Definitions of dictionary keys
 #define DICT_KEY_COMMAND 0
 #define DICT_KEY_VERSION 1
+#define DICT_KEY_SYNC_ID 2
 #define DICT_KEY_NUM_EVENTS 10
 #define DICT_KEY_TITLE 1
 #define DICT_KEY_LOCATION 2
@@ -24,21 +25,24 @@
 //Outgoing dictionary keys
 #define DICT_OUT_KEY_VERSION 0
 #define DICT_OUT_KEY_BACKWARDSVERSION 1
+#define DICT_OUT_KEY_LAST_SYNC_ID 2
 
 //Commands from phone
 #define COMMAND_INIT_DATA 0
 #define COMMAND_EVENT 1
 #define COMMAND_DONE 2
 #define COMMAND_EVENT_TIME 3
+#define COMMAND_NO_NEW_DATA 4
 
 CalendarEvent **buffer = 0; //buffered calendar events so far
 uint8_t buffer_size = 0; //number of elements in the buffer (for cleanup)
 uint8_t number_received = 0; //number of events completely received
 uint8_t number_expected = 0; //number of events the phone said it will send
+uint8_t current_sync_id = 0; //id of the current sync (as reported by phone)
 bool expecting_event_time = 0; //if true, we expect the last received event's time now (second message)
 bool update_request_sent = 0; //whether or not we informed the phone about outdated version
 
-void send_sync_request() { //Sends a request for fresh data to the phone
+void send_sync_request(uint8_t report_sync_id) { //Sends a request for fresh data to the phone. Report report_sync_id as last successful sync (0 to force sync)
 	APP_LOG(APP_LOG_LEVEL_DEBUG, "Sending sync request");
 	DictionaryIterator *iter;
 	app_message_outbox_begin(&iter);
@@ -46,6 +50,8 @@ void send_sync_request() { //Sends a request for fresh data to the phone
 	dict_write_tuplet(iter, &value);
 	Tuplet value2 = TupletInteger(DICT_OUT_KEY_BACKWARDSVERSION, BACKWARD_COMPAT_VERSION);
 	dict_write_tuplet(iter, &value2);
+	Tuplet value3 = TupletInteger(DICT_OUT_KEY_LAST_SYNC_ID, report_sync_id);
+	dict_write_tuplet(iter, &value3);
 	app_message_outbox_send();
 	sync_layer_set_progress(0,1);
 }
@@ -56,7 +62,7 @@ void out_sent_handler(DictionaryIterator *sent, void *context) {
 
 
 void out_failed_handler(DictionaryIterator *failed, AppMessageResult reason, void *context) {
-	// outgoing message failed
+	APP_LOG(APP_LOG_LEVEL_DEBUG, "Sending failed for reason %d", reason);
 }
 
 
@@ -70,7 +76,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 			//Check version number
 			if (dict_find(received, DICT_KEY_VERSION)->value->uint8 > WATCHAPP_VERSION) {
 				if (!update_request_sent) {
-					send_sync_request(); //make sure the phone knows about our mismatched version
+					send_sync_request(0); //make sure the phone knows about our mismatched version
 					update_request_sent = true; //do it only once
 				}
 				return; //ignore message
@@ -80,6 +86,8 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				communication_cleanup();
 			}
 			number_expected = dict_find(received, DICT_KEY_NUM_EVENTS)->value->uint8;
+			current_sync_id = dict_find(received, DICT_KEY_SYNC_ID)->value->uint8;
+			APP_LOG(APP_LOG_LEVEL_DEBUG, "starting with sync id %d", current_sync_id);
 			if (number_expected != 0) {
 				//init buffer
 				number_received = 0;
@@ -98,12 +106,16 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				sync_layer_set_progress(0,0);
 				handle_data_gone();
 				event_db_reset();
-				handle_new_data();
+				handle_new_data(current_sync_id);
 			}
 			
 			//Apply settings from the message
 			settings_set(dict_find(received, DICT_KEY_SETTINGS_BOOLFLAGS)->value->uint32, 
 						 dict_find(received, DICT_KEY_SETTINGS_DESIGN)->value->uint32);
+			break;
+			
+			case COMMAND_NO_NEW_DATA: //phone informs us that our data is up-to-date
+				sync_layer_set_progress(0,0);
 			break;
 			
 			case COMMAND_EVENT: //getting first half of an event
@@ -137,7 +149,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				for (int i=0;i<number_received;i++) //insert buffered events into database
 					event_db_put(buffer[i]);
 				
-				handle_new_data(); //show new data
+				handle_new_data(current_sync_id); //show new data
 				
 				//Reset to begin again
 				free(buffer);
@@ -150,7 +162,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				sync_layer_set_progress(0,0);
 			}
 			else {//phone thinks it's done but at some point, we began ignoring (yet ack'ing) its messages. So we request a restart
-				send_sync_request();
+				send_sync_request(0);
 				APP_LOG(APP_LOG_LEVEL_DEBUG, "Phone finished sync but something went wrong - requesting restart");
 			}
 			app_comm_set_sniff_interval(SNIFF_INTERVAL_NORMAL); //stop heightened communcation

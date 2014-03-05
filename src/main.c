@@ -6,6 +6,7 @@
 #include <persist_const.h>
 	
 time_t last_sync = 0; //time where the last successful sync happened
+uint8_t last_sync_id = 0; //id that the phone supplied for the last successful sync
 caltime_t refresh_at = 0; //time where the event display should be refreshed next (actually, refresh will happen if this threshold lays in the past (so, next minute))
 
 int num_events = 0; //number of events displayed. As many elements will be in the arrays below (an element may also be 0)
@@ -333,9 +334,11 @@ void remove_cal_data() { //tidies up anything in the event_layer_... arrays
 	day_separator_texts = 0;
 }
 
-void handle_new_data() { //Sync done. Show new data from database
+void handle_new_data(uint8_t sync_id) { //Sync done. Show new data from database
 	display_cal_data(); //Create the event layers etc.
 	last_sync = time(NULL); //remember successful sync
+	last_sync_id = sync_id;
+	persist_write_data(PERSIST_LAST_SYNC_ID, &last_sync_id, sizeof(last_sync_id));
 	event_db_persist(); //save database persistently
 }
 
@@ -386,8 +389,8 @@ static void handle_time_tick(struct tm *tick_time, TimeUnits units_changed) { //
 		update_date(tick_time);
 	
 	//check whether we should try for an update (if connected and last sync was more than (30-10*elapsed_event_num) minutes ago). Also when time went backward (time zoning)
-	if (bluetooth_connection_service_peek() && (time(NULL)-last_sync > 60*30-60*10*elapsed_event_num || time(NULL) < last_sync))
-		send_sync_request();
+	if (bluetooth_connection_service_peek() && (time(NULL)-last_sync > 60*30-60*15*elapsed_event_num || time(NULL) < last_sync))
+		send_sync_request(last_sync_id);
 	
 	//check whether we crossed the refresh_at threshold (e.g., event finished and has to be removed. Or event starts and now has to show endtime...)
 	if ((tick_time->tm_hour == 0 && tick_time->tm_min == 1) || (refresh_at != 0 && tm_to_caltime(tick_time) > refresh_at)) {
@@ -520,6 +523,13 @@ void handle_init(void) {
 	}
 	else
 		last_sync = 0;
+	
+	if (persist_exists(PERSIST_LAST_SYNC_ID)) {
+		persist_read_data(PERSIST_LAST_SYNC_ID, &last_sync_id, sizeof(last_sync_id));
+	}
+	else
+		last_sync_id = 0;
+	
 	event_db_restore_persisted();
 	settings_restore_persisted();
 	
