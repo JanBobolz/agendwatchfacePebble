@@ -304,9 +304,6 @@ void handle_new_data(uint8_t sync_id) { //Sync done. Show new data from database
 	
 	last_sync = time(NULL); //remember successful sync
 	last_sync_id = sync_id;
-	persist_write_data(PERSIST_LAST_SYNC_ID, &last_sync_id, sizeof(last_sync_id));
-	
-	db_persist(); //save database persistently
 }
 
 void handle_data_gone() { //Database will go down. Stop showing stuff
@@ -538,8 +535,8 @@ void handle_deinit(void) {
 		fonts_unload_custom_font(time_font);
 	
 	//Write persistent data
-	//persist_write_data(PERSIST_LAST_SYNC, &last_sync, sizeof(last_sync)); //force sync on reentering watchface
-	//db_persist(); //is persisted when new data arrives so this doesn't take so long here
+	db_persist();
+	persist_write_data(PERSIST_LAST_SYNC_ID, &last_sync_id, sizeof(last_sync_id));
 	//settings_persist(); //is persisted when new settings arrive
 	
 	//Destroy last references

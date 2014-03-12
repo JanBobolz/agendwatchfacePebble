@@ -8,11 +8,13 @@
 
 AgendaItem *db_items[NUM_EVENTS_SAVED]; //the 'database' itself
 int current_num_elems = 0; //number of actual entries in db_events
+bool dirty_bit = 0; //1 if there were changes to the database since last persist
 
 void db_reset() { //empties database. Also good to call to tidy up occupied heap space
 	for (int i=0; i<current_num_elems; i++)
 		free(db_items[i]);
 	
+	dirty_bit = 1;
 	current_num_elems = 0;
 }
 
@@ -24,6 +26,7 @@ void db_put(AgendaItem* item){ //inserts item into database. Associated heap mem
 	if (current_num_elems >= NUM_EVENTS_SAVED)
 		return;
 	
+	dirty_bit = 1;
 	db_items[current_num_elems++] = item;
 }
 
@@ -34,6 +37,9 @@ AgendaItem* db_get(const int offset) { //gives access to the offset'th item (zer
 }
 
 void db_persist() { //saves database into persistent storage.
+	if (!dirty_bit)
+		return;
+	
 	persist_write_int(PERSIST_NUM_ELEMS, current_num_elems);
 	for (int i=0;i<current_num_elems;i++)
 		persist_write_data(PERSIST_DB_PREFIX|i, db_items[i], sizeof(AgendaItem));
