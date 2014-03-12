@@ -101,12 +101,12 @@ void time_to_showstring(char* buffer, size_t buffersize, caltime_t time, caltime
 		buffer++; //advance pointer by the byte we just added
 	}
 	
-	//Catch times that are not on relative_to, show their date instead
-	if (caltime_to_date_only(relative_to) != caltime_to_date_only(time)) { //show weekday instead of time
+	//Catch times that are not on relative_to (and not on the day after, but early in the night), show their date instead
+	if (caltime_to_date_only(relative_to) != caltime_to_date_only(time) && !(caltime_get_tomorrow(relative_to) == caltime_to_date_only(time) && caltime_get_hour(time) < 3)) { //show weekday instead of time
 		static char *daystrings[7] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
 		snprintf(buffer, buffersize, "%s", daystrings[caltime_get_weekday(time)]);
-	} 
-	else if (relative_time && time>=relative_to && time-relative_to <= 60) { //show relative time ("in 5 minutes")
+	}
+	else if (relative_time && time>=relative_to && time-relative_to <= 60) { //show relative time ("in 5 minutes"). Condition implies that they're on the same day
 		snprintf(buffer, buffersize, "%dmin", (int) (time-relative_to));
 		refresh_at = 1; //force refresh next minute tick
 	}
