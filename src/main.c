@@ -236,7 +236,7 @@ void display_data() { //(Re-)creates all the layers for items in the database an
 
 	for (int i=0;i<db_size()&&y<168;i++) {
 		AgendaItem* item = db_get(i);
-		if (item->end_time < now) { //skip those that we shouldn't display
+		if (item->end_time != 0 && item->end_time < now) { //skip those that we shouldn't display
 			elapsed_item_num++;
 			continue;
 		}
