@@ -11,19 +11,13 @@
 
 //Append am/pm to time (if 12h is activated)
 #define SETTINGS_BOOL_AMPM 0x04
-
-//Show second row for regular events
-#define SETTINGS_BOOL_SHOW_ROW2 0x08
-
-//Show second row for all-day events
-#define SETTINGS_BOOL_AD_SHOW_ROW2 0x10
-
+	
 //First bit of font size id
 #define SETTINGS_BOOL_FONT_SIZE0 0x20
 
 //Second bit of font size id
 #define SETTINGS_BOOL_FONT_SIZE1 0x40
-	
+
 //Size of time in the header (lower bit)
 #define SETTINGS_BOOL_HEADER_SIZE0 0x80
 
@@ -33,14 +27,10 @@
 //Whether or not to show the date in the separator layers
 #define SETTINGS_BOOL_SEPARATOR_DATE 0x200
 	
-//Whether or not to display the remaining minutes instead of the time in events
-#define SETTINGS_BOOL_COUNTDOWNS 0x400
-	
-void settings_persist(); //saves settings to persistent storage.
+void settings_persist(); //saves settings to persistent storage. (Does not have to be called from outside settings.c)
 void settings_restore_persisted(); //restores settings from persistent storage (if exists)
 
 uint32_t settings_get_bool_flags(); //getter for general settings
-uint32_t settings_get_design(); //getter for design settings
-void settings_set(uint32_t bool_flags, uint32_t design); //setter for both. Will callback to main.h and persist on changes
+void settings_set(uint32_t bool_flags); //setter for both. Will callback to main.h and persist on changes
 
 #endif

@@ -1,26 +1,26 @@
 #include <pebble.h>
 #include <datatypes.h>
-#include <event_db.h>
+#include <item_db.h>
 #include <main.h>
 #include <communication.h>
 
 //Version of the watchapp. Will be compared to what version the (updated) phone app expects
-#define WATCHAPP_VERSION 7
-#define BACKWARD_COMPAT_VERSION 4
+#define WATCHAPP_VERSION 8
+#define BACKWARD_COMPAT_VERSION 8
 //BACKWARD_COMPAT_VERSION smallest version number that this version is backwards compatible to (so an Android app bundling that (older) version would still work)
 	
 //Definitions of dictionary keys
 #define DICT_KEY_COMMAND 0
 #define DICT_KEY_VERSION 1
 #define DICT_KEY_SYNC_ID 2
-#define DICT_KEY_NUM_EVENTS 10
-#define DICT_KEY_TITLE 1
-#define DICT_KEY_LOCATION 2
-#define DICT_KEY_STARTTIME 20
-#define DICT_KEY_ENDTIME 30
-#define DICT_KEY_ALLDAY 5
+#define DICT_KEY_NUM_ITEMS 10
+#define DICT_KEY_ITEM_TEXT1 1
+#define DICT_KEY_ITEM_TEXT2 2
+#define DICT_KEY_ITEM_DESIGN1 3
+#define DICT_KEY_ITEM_DESIGN2 4
+#define DICT_KEY_ITEM_STARTTIME 20
+#define DICT_KEY_ITEM_ENDTIME 30
 #define DICT_KEY_SETTINGS_BOOLFLAGS 40
-#define DICT_KEY_SETTINGS_DESIGN 41
 
 //Outgoing dictionary keys
 #define DICT_OUT_KEY_VERSION 0
@@ -35,12 +35,11 @@
 #define COMMAND_NO_NEW_DATA 4
 #define COMMAND_FORCE_REQUEST 5
 
-CalendarEvent **buffer = 0; //buffered calendar events so far
+AgendaItem **buffer = 0; //buffered items so far
 uint8_t buffer_size = 0; //number of elements in the buffer (for cleanup)
-uint8_t number_received = 0; //number of events completely received
-uint8_t number_expected = 0; //number of events the phone said it will send
+uint8_t number_received = 0; //number of items completely received
+uint8_t number_expected = 0; //number of items the phone said it will send
 uint8_t current_sync_id = 0; //id of the current sync (as reported by phone)
-bool expecting_event_time = 0; //if true, we expect the last received event's time now (second message)
 bool update_request_sent = 0; //whether or not we informed the phone about outdated version
 
 void send_sync_request(uint8_t report_sync_id) { //Sends a request for fresh data to the phone. Report report_sync_id as last successful sync (0 to force sync)
@@ -85,7 +84,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 			if (number_expected != 0) {
 				communication_cleanup();
 			}
-			number_expected = dict_find(received, DICT_KEY_NUM_EVENTS)->value->uint8;
+			number_expected = dict_find(received, DICT_KEY_NUM_ITEMS)->value->uint8;
 			Tuple* sync_id_tuple = dict_find(received, DICT_KEY_SYNC_ID);
 			if (sync_id_tuple != NULL)
 				current_sync_id = sync_id_tuple->value->uint8;
@@ -94,9 +93,9 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				//init buffer
 				number_received = 0;
 				buffer_size = 0;
-				buffer = malloc(sizeof(CalendarEvent*)*number_expected);
+				buffer = malloc(sizeof(AgendaItem*)*number_expected);
 				
-				APP_LOG(APP_LOG_LEVEL_DEBUG, "Starting sync. Expecting %d events", (int) number_expected);
+				APP_LOG(APP_LOG_LEVEL_DEBUG, "Starting sync. Expecting %d items", (int) number_expected);
 
 				//Begin heightened communication status (for faster sync, hopefully)
 				app_comm_set_sniff_interval(SNIFF_INTERVAL_REDUCED);
@@ -104,16 +103,15 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				//Show user
 				sync_layer_set_progress(number_received+1, number_expected+2);
 			} else {
-				APP_LOG(APP_LOG_LEVEL_DEBUG, "Phone does not have any events to send");
+				APP_LOG(APP_LOG_LEVEL_DEBUG, "Phone does not have any items to send");
 				sync_layer_set_progress(0,0);
 				handle_data_gone();
-				event_db_reset();
+				db_reset();
 				handle_new_data(current_sync_id);
 			}
 			
 			//Apply settings from the message
-			settings_set(dict_find(received, DICT_KEY_SETTINGS_BOOLFLAGS)->value->uint32, 
-						 dict_find(received, DICT_KEY_SETTINGS_DESIGN)->value->uint32);
+			settings_set(dict_find(received, DICT_KEY_SETTINGS_BOOLFLAGS)->value->uint32);
 			break;
 			
 			case COMMAND_NO_NEW_DATA: //phone informs us that our data is up-to-date
@@ -121,36 +119,25 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				handle_no_new_data();
 			break;
 			
-			case COMMAND_EVENT: //getting first half of an event
-			if (number_expected-number_received != 0 && number_expected != 0 && !expecting_event_time) { //check if message is expected
-				//APP_LOG(APP_LOG_LEVEL_DEBUG, "Got event %s. Start time: %lu", dict_find(received, DICT_KEY_TITLE)->value->cstring, dict_find(received, 147851)->value->uint32);				
-				buffer[number_received] = create_calendar_event();
+			case COMMAND_EVENT: //getting an item
+			if (number_expected-number_received != 0 && number_expected != 0) { //check if message is expected				
+				buffer[number_received] = create_agenda_item();
 				buffer_size++;
-				cal_set_title_and_loc(buffer[number_received], dict_find(received, DICT_KEY_TITLE)->value->cstring, dict_find(received, DICT_KEY_LOCATION)->value->cstring);
-				cal_set_allday(buffer[number_received], dict_find(received, DICT_KEY_ALLDAY)->value->uint8 ? 1 : 0);				
-				expecting_event_time = 1; //state now: waiting for second half
-			}
-			break;
-			
-			case COMMAND_EVENT_TIME: //getting second half of an event
-			if (number_expected-number_received != 0 && number_expected != 0 && expecting_event_time) { //message expected?
-				//Add information to calendar event
-				cal_set_start_time(buffer[number_received], dict_find(received, DICT_KEY_STARTTIME)->value->int32);
-				cal_set_end_time(buffer[number_received], dict_find(received, DICT_KEY_ENDTIME)->value->int32);
-				//APP_LOG(APP_LOG_LEVEL_DEBUG, "Got event time data for %s", buffer[number_received]->title);
+				set_item_row1(buffer[number_received], dict_find(received, DICT_KEY_ITEM_TEXT1)->value->cstring, dict_find(received, DICT_KEY_ITEM_DESIGN1)->value->uint8);
+				set_item_row2(buffer[number_received], dict_find(received, DICT_KEY_ITEM_TEXT2)->value->cstring, dict_find(received, DICT_KEY_ITEM_DESIGN2)->value->uint8);
+				set_item_times(buffer[number_received], dict_find(received, DICT_KEY_ITEM_STARTTIME)->value->int32, dict_find(received, DICT_KEY_ITEM_ENDTIME)->value->int32);
 				number_received++;
-				expecting_event_time = 0; //state: awaiting another first half (or done message)
 				sync_layer_set_progress(number_received+1, number_expected+2);
 			}
 			break;
-		
+			
 			case COMMAND_DONE: //phone signals it sent all its data
 			if (number_expected-number_received == 0 && number_expected != 0) { //is message expected?
 				handle_data_gone(); //stop showing data
-				event_db_reset(); //reset database
+				db_reset(); //reset database
 				
-				for (int i=0;i<number_received;i++) //insert buffered events into database
-					event_db_put(buffer[i]);
+				for (int i=0;i<number_received;i++) //insert buffered items into database
+					db_put(buffer[i]);
 				
 				handle_new_data(current_sync_id); //show new data
 				
@@ -159,7 +146,6 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				buffer_size = 0;
 				number_expected = 0;
 				number_received = 0;
-				expecting_event_time = 0;
 				
 				APP_LOG(APP_LOG_LEVEL_DEBUG, "Sync done");
 				sync_layer_set_progress(0,0);
@@ -193,6 +179,5 @@ void communication_cleanup() { //reset everything to start state (also cleans up
 		buffer_size = 0;
 		number_expected = 0;
 		number_received = 0;
-		expecting_event_time = 0;
 	}
 }

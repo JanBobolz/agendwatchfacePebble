@@ -1,9 +1,9 @@
 {
-    "versionLabel": "1.16",
+    "versionLabel": "2.0",
     "uuid": "1f366804-f1d2-4288-b71a-708661777887",
     "appKeys": {},
     "longName": "Agenda Watchface",
-    "versionCode": 6,
+    "versionCode": 8,
     "capabilities": [
         ""
     ],

@@ -1,5 +1,5 @@
 #include <pebble.h>
-#include <event_db.h>
+#include <item_db.h>
 #include <datatypes.h>
 #include <communication.h>
 #include <settings.h>
@@ -7,20 +7,17 @@
 	
 time_t last_sync = 0; //time where the last successful sync happened
 uint8_t last_sync_id = 0; //id that the phone supplied for the last successful sync
-caltime_t refresh_at = 0; //time where the event display should be refreshed next (actually, refresh will happen if this threshold lays in the past (so, next minute))
+caltime_t refresh_at = 0; //time where the item display should be refreshed next
 
-int num_events = 0; //number of events displayed. As many elements will be in the arrays below (an element may also be 0)
-int elapsed_event_num = 0; //number of elapsed events skipped during last refresh
-TextLayer **event_text1 = 0; //row one texts
-TextLayer **event_text2 = 0; //row two texts
-TextLayer **event_time1 = 0; //row one times
-TextLayer **event_time2 = 0; //row two times
-char **event_texts = 0; //big array for all the texts displayed on the layers. Layout: [row1_time row1_text row2_time row2_text] (repeated for each layer index)
+int num_layers = 0; //number of elements in item_layer and item_text
+int elapsed_item_num = 0; //number of items skipped because they were elapsed
+TextLayer **item_layers = 0; //list of all layers that were created for the displayed items
+char **item_texts = 0; //list of texts. item_text[i] corresponds to item_layer[i]
 
 //Font according to settings
-GFont font; //font to use for events (and separators)
-GFont font_bold; //corresponding bold font for events
-int line_height; //will contain height of a line (row) in a event (depends on chosen font height)
+GFont font; //font to use for items (and separators)
+GFont font_bold; //corresponding bold font
+int line_height; //will contain height of a line (row) in an item (depends on chosen font height)
 int font_index; //contains a two-bit number for the chosen font according to the settings
 
 int num_separators = 0; //number of separators. As many elements will be in the day_separator_layers array
@@ -79,9 +76,9 @@ void set_font_from_settings() {
 	}
 }
 
-//Calculate from settings how much horizontal space the event time layer should take. I know I could let Pebble measure the text width, but I want this offset to be constant
-int get_event_text_offset(uint8_t design_time, uint8_t number_of_times, bool append_am_pm) { //wants a 8 bit number in design_time (cf. call in create_event_layers())
-	if (design_time == 0) //no time displayed
+//Calculate from settings how much horizontal space the time layer should take. I know I could let Pebble measure the text width, but I want this offset to be constant for a consistent look
+int get_item_text_offset(uint8_t row_design, uint8_t number_of_times, bool append_am_pm) { //wants the row design
+	if ((row_design/ROW_DESIGN_TIME_TYPE_OFFSET)%0x8 == 0) //no time displayed
 		return 0;
 	
 	int result = font_index == 2 ? 45 : font_index == 1 ? 35 : 28; //start with basic width
@@ -123,101 +120,82 @@ void time_to_showstring(char* buffer, size_t buffersize, caltime_t time, caltime
 	}
 }
 
-//Creates the necessary layers for an event. Returns y+[height that the new layers take]. Every event has up to two rows, both consisting of a time and a text portion (either may be empty)
-int create_event_layers(int i, int y, Layer* parent, CalendarEvent* event, caltime_t relative_to, bool relative_time) { //relative_to and relative_time as used in time_to_showstring(...)
+//Creates the necessary layers for an item. Returns y+[height that the new layers take]. Every item has up to two rows, both consisting of a time and a text portion (either may be empty)
+int create_item_layers(int y, Layer* parent, AgendaItem* item, caltime_t relative_to, bool relative_time) { //relative_to and relative_time as used in time_to_showstring(...)
 	//Get settings
-	uint32_t design = settings_get_design();
 	uint32_t settings = settings_get_bool_flags();
-	bool show_2nd_row = (((settings & SETTINGS_BOOL_SHOW_ROW2) && !event->all_day) || ((settings & SETTINGS_BOOL_AD_SHOW_ROW2) && event->all_day)); //figure out whether this event has a second row
-	
-	//Design settings offset (all-day vs normal event) - after this, the first 4 bit will contain the design settings appropriate for this event
-	if (event->all_day)
-		design /= 0x10000;
 	
 	//Create the row(s)
 	for (int row=0; row<2; row++) {
-		if (row == 1 && !show_2nd_row) { //if it's the second row's loop turn but we don't display any, set null data
-			event_text2[i] = 0;
-			event_time2[i] = 0;
-			for (int j=0;j<2;j++)
-				event_texts[i*4+row*2+j] = 0;
+		if (row == 1 && item->row2design == 0) //skip second row if design says so
 			continue;
-		}
 		
-		//Variables for convenient settings access
-		uint8_t design_time = row == 0 ? design%0x10 : (design/0x100)%0x10; //results in two-bit number corresponding to appropriate design for the time (constants as in Android app)
-		uint8_t design_text = row == 0 ? (design/0x10)%0x10 : (design/0x1000)%0x10; //results in two-bit number corresponding to appropriate design for the text (constants as in Android app)
+		//Convenience variables
+		uint8_t row_design = row == 0 ? item->row1design : item->row2design;
+		uint8_t design_time = (row_design/ROW_DESIGN_TIME_TYPE_OFFSET)%0x8;
+		char* row_text = row == 0 ? item->row1text : item->row2text;
 		
-		//Figure out texts for this row
+		int time_layer_width = get_item_text_offset(row_design, design_time==3 ? 2 : 1, (settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0); //desired width of time layer
+		
+		//Create time text and layer
 		if (design_time != 0) { //should we show any time at all?
-			event_texts[i*4+row*2] = malloc(20*sizeof(char));
-			
+			item_texts[num_layers] = malloc(20*sizeof(char));
 			//figure out whether to display start or end time
-			caltime_t time_to_show = design_time == 2 ? event->end_time : event->start_time; 
-			if (design_time == 4) { //Settings say we should show end_time rather than start time iff event has started
-				if (get_current_time() >= event->start_time)
-					time_to_show = event->end_time;
+			caltime_t time_to_show = design_time == 2 ? item->end_time : item->start_time; 
+			if (design_time == 4) { //Settings say we should show end_time rather than start time iff item has started
+				if (get_current_time() >= item->start_time)
+					time_to_show = item->end_time;
 			}
 			
-			time_to_showstring(event_texts[i*4+row*2], 20, time_to_show, relative_to, relative_time, settings & SETTINGS_BOOL_12H ? 1 : 0,(settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0, time_to_show == event->end_time ? 1 : 0);
+			time_to_showstring(item_texts[num_layers], 20, time_to_show, relative_to, relative_time, settings & SETTINGS_BOOL_12H ? 1 : 0,(settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0, time_to_show == item->end_time ? 1 : 0);
 			if (design_time == 3) //we should show start and end time. So we append the end time
-				time_to_showstring(event_texts[i*4+row*2]+strlen(event_texts[i*4+row*2]), 10, event->end_time, relative_to, relative_time && get_current_time() >= event->start_time, settings & SETTINGS_BOOL_12H ? 1 : 0, (settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0, true);
+				time_to_showstring(item_texts[num_layers]+strlen(item_texts[num_layers]), 10, item->end_time, relative_to, relative_time && get_current_time() >= item->start_time, settings & SETTINGS_BOOL_12H ? 1 : 0, (settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0, true);
+		
+			//Create time layer
+			TextLayer *layer = text_layer_create(GRect(0,y,time_layer_width,line_height));
+			text_layer_set_background_color(layer, GColorWhite);
+			text_layer_set_text_color(layer, GColorBlack);
+			text_layer_set_font(layer, font);
+			text_layer_set_text(layer, item_texts[num_layers]);
+			layer_add_child(parent, text_layer_get_layer(layer));
+			item_layers[num_layers++] = layer;
+		}
+		
+		//Create text layer
+		if (row_text != 0) { //should we show any text at all?
+			item_texts[num_layers] = malloc(30*sizeof(char));
+			strncpy(item_texts[num_layers], row_text, 30);
 		}
 		else
-			event_texts[i*4+row*2] = 0;
-		
-		if (design_text != 0) { //should we show any text at all?
-			event_texts[i*4+row*2+1] = malloc(30*sizeof(char));
-			strncpy(event_texts[i*4+row*2+1], design_text == 1 ? event->title : event->location , 30); //set text to title or location (depending on settings)
-		}
-		else
-			event_texts[i*4+row*2+1] = 0;
-		
-		
-		//Add the actual layers for this row now
-		int x = get_event_text_offset(design_time, design_time==3 ? 2 : 1, (settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0); //desired width of time layer
-		
-		//Time layer
-		TextLayer *layer = text_layer_create(GRect(0,y,x,line_height));
-		if (row == 0) //store appropriately depending on which row we're creating right now
-			event_time1[i] = layer;
-		else
-			event_time2[i] = layer;
-		text_layer_set_background_color(layer, GColorWhite);
-		text_layer_set_text_color(layer, GColorBlack);
-		text_layer_set_font(layer, font);
-		text_layer_set_text(layer, event_texts[i*4+row*2]);
-		layer_add_child(parent, text_layer_get_layer(layer));
+			item_texts[num_layers] = 0;
 		
 		//Text layer
-		layer = text_layer_create(GRect(x,y,144-x,line_height));
-		if (row == 0) //store appropriately depending on which row we're creating right now
-			event_text1[i] = layer;
-		else
-			event_text2[i] = layer;
+		TextLayer *layer = text_layer_create(GRect(time_layer_width,y,144-time_layer_width,line_height));
 		text_layer_set_background_color(layer, GColorWhite);
 		text_layer_set_text_color(layer, GColorBlack);
-		text_layer_set_font(layer, design_text == 1 ? font_bold : font);
-		text_layer_set_text(layer, event_texts[i*4+row*2+1]);
+		text_layer_set_font(layer, row_design & ROW_DESIGN_TEXT_BOLD ? font_bold : font);
+		if (item_texts[num_layers] != 0)
+			text_layer_set_text(layer, item_texts[num_layers]);
 		layer_add_child(parent, text_layer_get_layer(layer));
+		item_layers[num_layers++] = layer;
 		
 		y+=line_height; //add this line's height to y for return value
 	}
 	
-	return y; //screen offset where this event's layers end
+	return y; //screen offset where this item's layers end
 }
 
-//Creates separator (like the "Monday" layer, separating today's events from tomorrow's), returns y+[own height]
-int create_day_separator_layer(int i, int y, Layer* parent, CalendarEvent* event) {
+//Creates separator (like the "Monday" layer, separating today's items from tomorrow's), returns y+[own height]
+int create_day_separator_layer(int i, int y, Layer* parent, caltime_t day) {
 	static char *daystrings[8] = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Tomorrow"};
 	static char *monthstrings[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"};
 	
 	//Set text
 	day_separator_texts[i] = malloc(sizeof(char)*20);
 	if (settings_get_bool_flags() & SETTINGS_BOOL_SEPARATOR_DATE)
-		snprintf(day_separator_texts[i], 20, "%s, %s %02ld", daystrings[cal_begins_tomorrow(event) ? 7 : caltime_get_weekday(event->start_time)], monthstrings[caltime_get_month(event->start_time)-1], caltime_get_day(event->start_time));
+		snprintf(day_separator_texts[i], 20, "%s, %s %02ld", daystrings[caltime_to_date_only(day) == caltime_get_tomorrow(get_current_time()) ? 7 : caltime_get_weekday(day)], monthstrings[caltime_get_month(day)-1], caltime_get_day(day));
 	else
-		snprintf(day_separator_texts[i], 20, "%s", daystrings[cal_begins_tomorrow(event) ? 7 : caltime_get_weekday(event->start_time)]);
+		snprintf(day_separator_texts[i], 20, "%s", daystrings[caltime_to_date_only(day) == caltime_get_tomorrow(get_current_time()) ? 7 : caltime_get_weekday(day)]);
 	
 	//Create layer
 	day_separator_layers[i] = text_layer_create(GRect(0,y,144,line_height));
@@ -231,111 +209,88 @@ int create_day_separator_layer(int i, int y, Layer* parent, CalendarEvent* event
 	return y+line_height;
 }
 
-bool should_be_displayed(CalendarEvent* event) { //predicate for a calendar event. true iff event has not ended yet
-	return event->end_time >= get_current_time();
-}
-
-void display_cal_data() { //(Re-)creates all the layers for the events in the database and shows them. (Re-)creates event_layer_... arrays
+void display_data() { //(Re-)creates all the layers for items in the database and shows them. (Re-)creates item_layers, item_texts, ... arrays
 	Layer *window_layer = window_get_root_layer(window);
-	if (event_db_size() <= 0)
+	if (db_size() <= 0)
 		return;
 	
 	//Create arrays
-	event_text1 = malloc(sizeof(TextLayer*)*event_db_size());
-	event_text2 = malloc(sizeof(TextLayer*)*event_db_size());
-	event_time1 = malloc(sizeof(TextLayer*)*event_db_size());
-	event_time2 = malloc(sizeof(TextLayer*)*event_db_size());
-	event_texts = malloc(sizeof(char*)*event_db_size()*4); //a string for every text layer
-	day_separator_layers = malloc(sizeof(TextLayer*)*event_db_size());
-	day_separator_texts = malloc(sizeof(char*)*event_db_size());
+	item_layers = malloc(sizeof(TextLayer*)*db_size()*4); //maximal four layers per item in the db
+	item_texts = malloc(sizeof(char*)*db_size()*4);
+	day_separator_layers = malloc(sizeof(TextLayer*)*db_size()); //maximal one day-separator per item
+	day_separator_texts = malloc(sizeof(char*)*db_size());
 	
 	//Figure out font to use
 	set_font_from_settings();
 	
-	//Iterate over calendar events
-	num_events = 0;
-	elapsed_event_num = 0;
+	//Iterate over agenda items
+	num_layers = 0;
+	elapsed_item_num = 0;
 	num_separators = 0;
 	refresh_at = 0; //contains the earliest time that we need to schedule a refresh for
-	CalendarEvent *previous_event = 0; //contains the event from previous loop iteration (or 0)
+	AgendaItem *previous_item = 0; //contains the item from previous loop iteration (or 0)
 	int y = header_height; //vertical offset to start displaying layers
 	caltime_t now = get_current_time();
-	caltime_t last_separator_date = now; //the date (time portion should be ignored) of the last day separator (so that times can be shown relative to that)
+	caltime_t last_separator_date = now; //the date of the last day separator (so that times can be shown relative to that)
+	caltime_t tomorrow_date = caltime_get_tomorrow(now);
 
-	for (int i=0;i<event_db_size()&&y<168;i++) {
-		CalendarEvent* event = event_db_get(i);
-		if (!should_be_displayed(event)) { //skip those that we shouldn't display
-			elapsed_event_num++;
+	for (int i=0;i<db_size()&&y<168;i++) {
+		AgendaItem* item = db_get(i);
+		if (item->end_time < now) { //skip those that we shouldn't display
+			elapsed_item_num++;
 			continue;
 		}
 				
 		//Check if we need a date separator
-		if ((previous_event == 0 && !cal_begins_before_tomorrow(event)) || (previous_event != 0 && cal_begins_later_day(previous_event, event) && !cal_begins_before_tomorrow(event))) {
-			y = create_day_separator_layer(num_separators, y, window_layer, event);
-			last_separator_date = event->start_time;
+		if ((previous_item == 0 && caltime_to_date_only(item->start_time) >= tomorrow_date) //first item doesn't begin before tomorrow
+			|| (previous_item != 0 && caltime_to_date_only(previous_item->start_time) != caltime_to_date_only(item->start_time) && caltime_to_date_only(item->start_time) >= tomorrow_date)) { //it's not the first item, but the previous one belonged to another date and this one doesn't start until tomorrow
+			y = create_day_separator_layer(num_separators, y, window_layer, item->start_time);
+			last_separator_date = item->start_time;
 			num_separators++;
 		}
 		
-		//Add event layers
-		y = create_event_layers(num_events, y, window_layer, event, last_separator_date, num_separators == 0 && (settings_get_bool_flags() & SETTINGS_BOOL_COUNTDOWNS))+1;
-		num_events++;
+		//Add item layers
+		y = create_item_layers(y, window_layer, item, last_separator_date, num_separators == 0)+1;
 		
-		//Schedule refresh for when the event starts or ends
-		if ((refresh_at == 0 || refresh_at > event->start_time) && event->start_time > now)
-			refresh_at = event->start_time;
-		if (refresh_at == 0 || refresh_at > event->end_time)
-			refresh_at = event->end_time;
+		//Schedule refresh for when the item starts or ends
+		if ((refresh_at == 0 || refresh_at > item->start_time) && item->start_time > now)
+			refresh_at = item->start_time;
+		if (refresh_at == 0 || refresh_at > item->end_time)
+			refresh_at = item->end_time;
 		
-		previous_event = event;
+		previous_item = item;
 	}
 	
 	//Adjust refresh_at for countdown functionality. The other adjustment (for when a countdown is currently active) happens in the time_to_showstring() function
-	if ((settings_get_bool_flags() & SETTINGS_BOOL_COUNTDOWNS) && refresh_at != 0 && refresh_at % 60*60 >=60)
-		refresh_at -= 60; //so that we can begin the countdown there
+	if (refresh_at%(60*60) >=60)
+		refresh_at -= 60; //so that we can begin the countdown there //TODO this may cause too often refreshes (since the next refresh_at item doesn't necessarily want countdowns). Possibly use countdown_offset = (item->row1design & ROW_DESIGN_TIME_COUNTDOWN) || (item->row2design & ROW_DESIGN_TIME_COUNTDOWN) ? 60 : 0;
 }
 
-void remove_cal_data() { //tidies up anything in the event_layer_... arrays
-	for (int i=0;i<num_events;i++) {
-		if (event_text1[i] != 0)
-			text_layer_destroy(event_text1[i]);
-		if (event_text2[i] != 0)
-			text_layer_destroy(event_text2[i]);
-		if (event_time1[i] != 0)
-			text_layer_destroy(event_time1[i]);
-		if (event_time2[i] != 0)
-			text_layer_destroy(event_time2[i]);
-		for (int j=0; j<4; j++) {
-			if (event_texts[i*4+j] != 0)
-				free(event_texts[i*4+j]);
-		}
+void remove_displayed_data() { //tidies up anything that display_data() created
+	for (int i=0;i<num_layers;i++) {
+		if (item_layers[i] != 0)
+			text_layer_destroy(item_layers[i]);
+		if (item_texts[i] != 0)
+			free(item_texts[i]);
 	}
 	for (int i=0;i<num_separators;i++) {
 		text_layer_destroy(day_separator_layers[i]);
 		free(day_separator_texts[i]);
 	}
 	
-	num_events = 0;
+	num_layers = 0;
 	num_separators = 0;
-	if (event_text1 != 0)
-		free(event_text1);
-	if (event_text2 != 0)
-		free(event_text2);
-	if (event_time1 != 0)
-		free(event_time1);
-	if (event_time2 != 0)
-		free(event_time2);
+	if (item_layers != 0)
+		free(item_layers);
+	if (item_texts != 0)
+		free(item_texts);
 	if (day_separator_layers != 0)
 		free(day_separator_layers);
-	if (event_texts != 0)
-		free(event_texts);
 	if (day_separator_texts != 0)
 		free(day_separator_texts);
 	
-	event_text1 = 0;
-	event_text2 = 0;
-	event_time1 = 0;
-	event_time2 = 0;
-	event_texts = 0;
+	item_layers = 0;
+	item_texts = 0;
 	day_separator_layers = 0;
 	day_separator_texts = 0;
 }
@@ -345,17 +300,17 @@ void handle_no_new_data() { //sync done, no new data
 }
 
 void handle_new_data(uint8_t sync_id) { //Sync done. Show new data from database
-	display_cal_data(); //Create the event layers etc.
+	display_data(); //Create the item layers etc.
 	
 	last_sync = time(NULL); //remember successful sync
 	last_sync_id = sync_id;
 	persist_write_data(PERSIST_LAST_SYNC_ID, &last_sync_id, sizeof(last_sync_id));
 	
-	event_db_persist(); //save database persistently
+	db_persist(); //save database persistently
 }
 
 void handle_data_gone() { //Database will go down. Stop showing stuff
-	remove_cal_data();
+	remove_displayed_data();
 }
 
 void update_clock() { //updates the layer for the current time (if exists)
@@ -400,16 +355,16 @@ static void handle_time_tick(struct tm *tick_time, TimeUnits units_changed) { //
 	if (units_changed & DAY_UNIT)
 		update_date(tick_time);
 	
-	//check whether we should try for an update (if connected and last sync was more than (30-10*elapsed_event_num) minutes ago). Also when time went backward (time zoning)
-	if (bluetooth_connection_service_peek() && (time(NULL)-last_sync > 60*30-60*15*elapsed_event_num || time(NULL) < last_sync))
+	//check whether we should try for an update (if connected and last sync was more than (30-20*elapsed_item_num) minutes ago). Also when time went backward (time zoning/DST)
+	if (bluetooth_connection_service_peek() && (time(NULL)-last_sync > 60*30-60*20*elapsed_item_num || time(NULL) < last_sync))
 		send_sync_request(last_sync_id);
 	
-	//check whether we crossed the refresh_at threshold (e.g., event finished and has to be removed. Or event starts and now has to show endtime...)
-	if ((tick_time->tm_hour == 0 && tick_time->tm_min == 1) || (refresh_at != 0 && tm_to_caltime(tick_time) >= refresh_at)) {
-		APP_LOG(APP_LOG_LEVEL_DEBUG, "Refreshing currently shown events");
+	//check whether we crossed the refresh_at threshold (e.g., item finished and has to be removed. Or item starts and now has to show endtime...)
+	if ((tick_time->tm_hour == 0 && tick_time->tm_min == 0) || (refresh_at != 0 && tm_to_caltime(tick_time) >= refresh_at)) {
+		APP_LOG(APP_LOG_LEVEL_DEBUG, "Refreshing currently shown items");
 		//Reset what's displayed and redisplay
-		remove_cal_data();
-		display_cal_data();
+		remove_displayed_data();
+		display_data();
 	}
 }
 
@@ -515,7 +470,7 @@ void destroy_header() {
 
 //Callback if settings changed (also called in handle_init()). We'll simply destroy everything, recreate the header if still set to. Calendar data will be shown again after sync is done
 void handle_new_settings() {
-	remove_cal_data();
+	remove_displayed_data();
 	destroy_header();
 	create_header(window_get_root_layer(window));
 }
@@ -528,13 +483,13 @@ void handle_init(void) {
  	window_set_background_color(window, GColorBlack);
 	
 	//Read persistent data
-	if (persist_exists(PERSIST_LAST_SYNC)) {
+	/*if (persist_exists(PERSIST_LAST_SYNC)) {
 		persist_read_data(PERSIST_LAST_SYNC, &last_sync, sizeof(last_sync));
 		if (time(NULL)-last_sync > 60*15) //force sync more often (not too often) if the watchface was left in the meantime...
 			last_sync = 0;
 	}
 	else
-		last_sync = 0;
+		last_sync = 0;*/
 	
 	if (persist_exists(PERSIST_LAST_SYNC_ID)) {
 		persist_read_data(PERSIST_LAST_SYNC_ID, &last_sync_id, sizeof(last_sync_id));
@@ -542,14 +497,14 @@ void handle_init(void) {
 	else
 		last_sync_id = 0;
 	
-	event_db_restore_persisted();
+	db_restore_persisted();
 	settings_restore_persisted();
 	
 	//Create some initial stuff depending on settings
 	handle_new_settings();
 	
 	//Show data from database
-	display_cal_data();	
+	display_data();	
 	
 	//Register services
 	tick_timer_service_subscribe(MINUTE_UNIT, &handle_time_tick);
@@ -575,7 +530,7 @@ void handle_deinit(void) {
 	
 	//Destroy ui
 	destroy_header();
-	remove_cal_data();
+	remove_displayed_data();
 	window_destroy(window);
 	
 	//Unload font(s)
@@ -583,12 +538,12 @@ void handle_deinit(void) {
 		fonts_unload_custom_font(time_font);
 	
 	//Write persistent data
-	persist_write_data(PERSIST_LAST_SYNC, &last_sync, sizeof(last_sync));
-	//event_db_persist(); //is persisted when new data arrives so this doesn't take so long here
+	//persist_write_data(PERSIST_LAST_SYNC, &last_sync, sizeof(last_sync)); //force sync on reentering watchface
+	//db_persist(); //is persisted when new data arrives so this doesn't take so long here
 	//settings_persist(); //is persisted when new settings arrive
 	
 	//Destroy last references
-	event_db_reset();
+	db_reset();
 	communication_cleanup();
 }
 

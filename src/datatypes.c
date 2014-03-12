@@ -1,30 +1,35 @@
 #include<pebble.h>
 #include<datatypes.h>
 	
-CalendarEvent* create_calendar_event() {
-	return malloc(sizeof(CalendarEvent));
+AgendaItem* create_agenda_item() {
+	return malloc(sizeof(AgendaItem));
 }
 
-//Calendar setters
-void cal_set_title_and_loc(CalendarEvent* event, char* title, char* location) {//strings will be (deep-)copied and truncated if necessary
+//Setters
+void set_item_row1(AgendaItem* item, char* text, uint8_t design) {
+	strncpy(item->row1text, text, sizeof(item->row1text));
+	item->row1text[sizeof(item->row1text)-1] = 0;
+	item->row1design = design;
+}
+
+void set_item_row2(AgendaItem* item, char* text, uint8_t design) {
+	strncpy(item->row2text, text, sizeof(item->row2text));
+	item->row2text[sizeof(item->row2text)-1] = 0;
+	item->row2design = design;
+}
+
+void set_item_times(AgendaItem* item, caltime_t start, caltime_t end) {
+	item->start_time = start;
+	item->end_time = end;
+}
+
+
+/*void cal_set_title_and_loc(CalendarEvent* event, char* title, char* location) {//strings will be (deep-)copied and truncated if necessary
 	strncpy(event->title, title, sizeof(event->title));
 	event->title[sizeof(event->title)-1] = 0;
 	strncpy(event->location, location, sizeof(event->location));
 	event->location[sizeof(event->location)-1] = 0;
 }
-
-void cal_set_allday(CalendarEvent* event, bool allday) {
-	event->all_day = allday ? 1 : 0;
-}
-
-void cal_set_start_time(CalendarEvent* event, caltime_t time) {
-	event->start_time = time;
-}
-
-void cal_set_end_time(CalendarEvent* event, caltime_t time) {
-	event->end_time = time;
-}
-
 
 //Time-related predicates
 bool cal_ends_before(CalendarEvent* before, CalendarEvent* after) {
@@ -46,16 +51,16 @@ bool cal_begins_tomorrow(CalendarEvent* event) {
 	time_t t = time(NULL);
 	struct tm *today = localtime(&t);
 	
-	/*//Add a day to now and normalize...
-	tomorrow->tm_mday++;
-	mktime(tomorrow);*/ //Code crashes... 
+	//Add a day to now and normalize...
+	//tomorrow->tm_mday++;
+	//mktime(tomorrow); //Code crashes... 
 	
 	return caltime_get_tomorrow(tm_to_caltime_date_only(today)) == caltime_to_date_only(event->start_time);
 }
 
 bool cal_begins_later_day(CalendarEvent* before, CalendarEvent* after) { //true iff 'after' begins on a day later than 'before' begins. Compares only date, not time
 	return before->start_time - before->start_time%(60*24) < after->start_time - after->start_time%(60*24);
-}
+}*/
 
 caltime_t tm_to_caltime_date_only(struct tm *t) { //creates caltime_t format with only the date specified (so 00:00 o'clock that day)
 	return ((t->tm_wday+6)%7)*60*24+t->tm_mday*60*24*7+t->tm_mon*60*24*7*32+t->tm_year*60*24*7*32*12;
