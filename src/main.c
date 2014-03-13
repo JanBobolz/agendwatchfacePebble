@@ -492,7 +492,7 @@ void accel_tap_handler(AccelAxisType axis, int32_t direction) {
 			scroll_reset_timer = 0;
 		}
 		if (scroll_position != 0) //set by scroll()
-			scroll_reset_timer = app_timer_register(10000, scroll_reset_timer_callback, NULL); //set timer to reset scroll position to 0
+			scroll_reset_timer = app_timer_register(7000, scroll_reset_timer_callback, NULL); //set timer to reset scroll position to 0
 	}
 }
 

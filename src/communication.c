@@ -20,6 +20,7 @@
 #define DICT_KEY_ITEM_DESIGN2 4
 #define DICT_KEY_ITEM_STARTTIME 20
 #define DICT_KEY_ITEM_ENDTIME 30
+#define DICT_KEY_ITEM_INDEX 5
 #define DICT_KEY_SETTINGS_BOOLFLAGS 40
 
 //Outgoing dictionary keys
@@ -39,6 +40,7 @@ AgendaItem **buffer = 0; //buffered items so far
 uint8_t buffer_size = 0; //number of elements in the buffer (for cleanup)
 uint8_t number_received = 0; //number of items completely received
 uint8_t number_expected = 0; //number of items the phone said it will send
+uint8_t index_expected = 0; //index that the next received item should carry (other messages will be ignored)
 uint8_t current_sync_id = 0; //id of the current sync (as reported by phone)
 bool update_request_sent = 0; //whether or not we informed the phone about outdated version
 
@@ -92,6 +94,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 			if (number_expected != 0) {
 				//init buffer
 				number_received = 0;
+				index_expected = 0;
 				buffer_size = 0;
 				buffer = malloc(sizeof(AgendaItem*)*number_expected);
 				
@@ -121,12 +124,18 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 			
 			case COMMAND_EVENT: //getting an item
 			if (number_expected-number_received != 0 && number_expected != 0) { //check if message is expected				
+				if (index_expected != dict_find(received, DICT_KEY_ITEM_INDEX)->value->uint8) {
+					APP_LOG(APP_LOG_LEVEL_DEBUG, "got unexpected event (wrong index). Ignoring");
+					break;
+				}
+				
 				buffer[number_received] = create_agenda_item();
 				buffer_size++;
 				set_item_row1(buffer[number_received], dict_find(received, DICT_KEY_ITEM_TEXT1)->value->cstring, dict_find(received, DICT_KEY_ITEM_DESIGN1)->value->uint8);
 				set_item_row2(buffer[number_received], dict_find(received, DICT_KEY_ITEM_TEXT2)->value->cstring, dict_find(received, DICT_KEY_ITEM_DESIGN2)->value->uint8);
 				set_item_times(buffer[number_received], dict_find(received, DICT_KEY_ITEM_STARTTIME)->value->int32, dict_find(received, DICT_KEY_ITEM_ENDTIME)->value->int32);
 				number_received++;
+				index_expected++;
 				sync_layer_set_progress(number_received+1, number_expected+2);
 			}
 			break;
@@ -139,13 +148,14 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				for (int i=0;i<number_received;i++) //insert buffered items into database
 					db_put(buffer[i]);
 				
-				handle_new_data(current_sync_id); //show new data
+				handle_new_data(current_sync_id); //show new data, remember the sync_id
 				
 				//Reset to begin again
 				free(buffer);
 				buffer_size = 0;
 				number_expected = 0;
 				number_received = 0;
+				index_expected = 0;
 				
 				APP_LOG(APP_LOG_LEVEL_DEBUG, "Sync done");
 				sync_layer_set_progress(0,0);
@@ -179,5 +189,6 @@ void communication_cleanup() { //reset everything to start state (also cleans up
 		buffer_size = 0;
 		number_expected = 0;
 		number_received = 0;
+		number_expected = 0;
 	}
 }
