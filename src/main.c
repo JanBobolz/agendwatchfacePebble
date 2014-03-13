@@ -485,7 +485,7 @@ void scroll_reset_timer_callback(void* data) {
 //Reacts to tap event by scrolling and preparing to reset the scrolling position
 void accel_tap_handler(AccelAxisType axis, int32_t direction) {
 	if (scroll_animation == 0) { //only when animation is finished
-		scroll(scroll_position+168 > items_biggest_y ? 0 : scroll_position+150);
+		scroll(scroll_position+168 > items_biggest_y ? 0 : scroll_position+150+168 > items_biggest_y ? items_biggest_y-168+1 : scroll_position+150);
 		
 		if (scroll_reset_timer != 0) {
 			app_timer_cancel(scroll_reset_timer);
