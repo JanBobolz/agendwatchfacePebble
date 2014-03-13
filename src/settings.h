@@ -27,6 +27,9 @@
 //Whether or not to show the date in the separator layers
 #define SETTINGS_BOOL_SEPARATOR_DATE 0x200
 	
+//Whether or not to scroll on accelerometer tap
+#define SETTINGS_BOOL_ENABLE_SCROLL 0x400
+	
 void settings_persist(); //saves settings to persistent storage. (Does not have to be called from outside settings.c)
 void settings_restore_persisted(); //restores settings from persistent storage (if exists)
 

@@ -4,7 +4,7 @@
 #include <persist_const.h>
 
 //Maximal number of items this database can store. Should be small enough so persistence memory is not exhausted (also, phone has a limit of items it wants to send, this should correspond to this constant)
-#define NUM_EVENTS_SAVED 10
+#define NUM_EVENTS_SAVED 20
 
 AgendaItem *db_items[NUM_EVENTS_SAVED]; //the 'database' itself
 int current_num_elems = 0; //number of actual entries in db_events

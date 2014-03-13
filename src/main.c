@@ -4,6 +4,7 @@
 #include <communication.h>
 #include <settings.h>
 #include <persist_const.h>
+#include <main.h>
 	
 time_t last_sync = 0; //time where the last successful sync happened
 uint8_t last_sync_id = 0; //id that the phone supplied for the last successful sync
@@ -25,10 +26,16 @@ TextLayer **day_separator_layers = 0; //layers for showing weekday
 char **day_separator_texts = 0; //texts on separators
 
 Window *window; //the watchface's only window
+Layer *root_layer; //the layer containing the window's content (different from window_get_root_layer(window))
 TextLayer *text_layer_time = 0; //layer for the current time (if header enabled in settings)
 TextLayer *text_layer_date = 0; //layer for current date (if header enabled)
 TextLayer *text_layer_weekday = 0; //layer for current weekday (if header enabled)
 TextLayer *sync_indicator_layer = 0; //sync indicator
+
+PropertyAnimation *scroll_animation = 0; //current scrolling animation or 0
+AppTimer* scroll_reset_timer = 0; //timer handle to reset scroll position after some time
+int scroll_position = 0; //current y-axis scrolling position (or the one that's being scrolled to)
+int items_biggest_y = 0; //the y position of the last displayed item
 
 GFont time_font = 0; //Font for current time (custom font)
 GFont date_font; //Font for the current date (system font)
@@ -210,7 +217,7 @@ int create_day_separator_layer(int i, int y, Layer* parent, caltime_t day) {
 }
 
 void display_data() { //(Re-)creates all the layers for items in the database and shows them. (Re-)creates item_layers, item_texts, ... arrays
-	Layer *window_layer = window_get_root_layer(window);
+	Layer *window_layer = root_layer;
 	if (db_size() <= 0)
 		return;
 	
@@ -234,7 +241,7 @@ void display_data() { //(Re-)creates all the layers for items in the database an
 	caltime_t last_separator_date = now; //the date of the last day separator (so that times can be shown relative to that)
 	caltime_t tomorrow_date = caltime_get_tomorrow(now);
 
-	for (int i=0;i<db_size()&&y<168;i++) {
+	for (int i=0;i<db_size();i++) {
 		AgendaItem* item = db_get(i);
 		if (item->end_time != 0 && item->end_time < now) { //skip those that we shouldn't display
 			elapsed_item_num++;
@@ -260,6 +267,8 @@ void display_data() { //(Re-)creates all the layers for items in the database an
 		
 		previous_item = item;
 	}
+	
+	items_biggest_y = y;
 	
 	//Adjust refresh_at for countdown functionality. The other adjustment (for when a countdown is currently active) happens in the time_to_showstring() function
 	if (refresh_at%(60*60) >=60)
@@ -304,6 +313,8 @@ void handle_new_data(uint8_t sync_id) { //Sync done. Show new data from database
 	
 	last_sync = time(NULL); //remember successful sync
 	last_sync_id = sync_id;
+	
+	scroll(0);
 }
 
 void handle_data_gone() { //Database will go down. Stop showing stuff
@@ -465,11 +476,68 @@ void destroy_header() {
 	sync_indicator_layer = 0;
 }
 
+//Scrolls back to 0
+void scroll_reset_timer_callback(void* data) {
+	scroll(0);
+	scroll_reset_timer = 0;
+}
+
+//Reacts to tap event by scrolling and preparing to reset the scrolling position
+void accel_tap_handler(AccelAxisType axis, int32_t direction) {
+	if (scroll_animation == 0) { //only when animation is finished
+		scroll(scroll_position+168 > items_biggest_y ? 0 : scroll_position+150);
+		
+		if (scroll_reset_timer != 0) {
+			app_timer_cancel(scroll_reset_timer);
+			scroll_reset_timer = 0;
+		}
+		if (scroll_position != 0) //set by scroll()
+			scroll_reset_timer = app_timer_register(10000, scroll_reset_timer_callback, NULL); //set timer to reset scroll position to 0
+	}
+}
+
 //Callback if settings changed (also called in handle_init()). We'll simply destroy everything, recreate the header if still set to. Calendar data will be shown again after sync is done
 void handle_new_settings() {
 	remove_displayed_data();
 	destroy_header();
-	create_header(window_get_root_layer(window));
+	create_header(root_layer);
+	
+	accel_tap_service_unsubscribe();
+	
+	if (settings_get_bool_flags() & SETTINGS_BOOL_ENABLE_SCROLL)
+		accel_tap_service_subscribe(&accel_tap_handler);
+}
+
+//Destroys current animation (not sure if this would be safe to call during a running animation)
+void scroll_cleanup() {
+	if (scroll_animation != 0)
+		property_animation_destroy(scroll_animation);
+	scroll_animation = 0;
+}
+
+void scroll_animation_started(Animation *animation, void *data) {
+   
+}
+
+void scroll_animation_stopped(Animation *animation, bool finished, void *data) {
+   scroll_cleanup();
+}
+
+void scroll(int y) { //scolls so that the top of the window is offset by y
+	if (scroll_animation != 0) //animation still running
+		return;
+	
+	GRect from_frame = layer_get_frame(root_layer);
+    GRect to_frame = GRect(0, -y, from_frame.size.w, from_frame.size.h);
+
+    scroll_animation = property_animation_create_layer_frame(root_layer, &from_frame, &to_frame);
+	animation_set_delay((struct Animation*) scroll_animation, 100);
+	animation_set_handlers((struct Animation*) scroll_animation, (AnimationHandlers) {
+        .started = (AnimationStartedHandler) scroll_animation_started,
+        .stopped = (AnimationStoppedHandler) scroll_animation_stopped,
+      }, NULL);
+    animation_schedule((Animation*) scroll_animation);
+	scroll_position = y;
 }
 
 //Create all necessary structures, etc.
@@ -478,15 +546,9 @@ void handle_init(void) {
 	window = window_create();
 	window_stack_push(window, true);
  	window_set_background_color(window, GColorBlack);
-	
-	//Read persistent data
-	/*if (persist_exists(PERSIST_LAST_SYNC)) {
-		persist_read_data(PERSIST_LAST_SYNC, &last_sync, sizeof(last_sync));
-		if (time(NULL)-last_sync > 60*15) //force sync more often (not too often) if the watchface was left in the meantime...
-			last_sync = 0;
-	}
-	else
-		last_sync = 0;*/
+	root_layer = layer_create(GRect(0,0,1,1));
+	layer_set_clips(root_layer, false);
+	layer_add_child(window_get_root_layer(window), root_layer);
 	
 	if (persist_exists(PERSIST_LAST_SYNC_ID)) {
 		persist_read_data(PERSIST_LAST_SYNC_ID, &last_sync_id, sizeof(last_sync_id));
@@ -528,6 +590,7 @@ void handle_deinit(void) {
 	//Destroy ui
 	destroy_header();
 	remove_displayed_data();
+	layer_destroy(root_layer);
 	window_destroy(window);
 	
 	//Unload font(s)
@@ -542,6 +605,9 @@ void handle_deinit(void) {
 	//Destroy last references
 	db_reset();
 	communication_cleanup();
+	scroll_cleanup();
+	if (scroll_reset_timer != 0)
+		app_timer_cancel(scroll_reset_timer);
 }
 
 int main(void) {
