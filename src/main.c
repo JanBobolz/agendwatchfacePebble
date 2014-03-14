@@ -100,6 +100,11 @@ int get_item_text_offset(uint8_t row_design, uint8_t number_of_times, bool appen
 	return result;
 }
 
+void set_refresh_at_if_decrease(caltime_t t) { //convenience function
+	if (refresh_at == 0 || t < refresh_at)
+		refresh_at = t;
+}
+
 //Create a string from time that can be shown to the user according to settings. relative_to contains the date that the user expects to see (to determine whether to display time or day). If relative_time is true, then the function may print remaining minutes to relative_to.
 void time_to_showstring(char* buffer, size_t buffersize, caltime_t time, caltime_t relative_to, bool relative_time, bool hour_12, bool append_am_pm, bool prepend_dash) {
 	if (prepend_dash) {
@@ -124,6 +129,7 @@ void time_to_showstring(char* buffer, size_t buffersize, caltime_t time, caltime
 		}
 		else
 			snprintf(buffer, buffersize, append_am_pm ? (caltime_get_hour(time) <= 12 ? "%02ld:%02ldam" : "%02ld:%02ldpm") : "%02ld:%02ld", caltime_get_hour(time), caltime_get_minute(time));
+		set_refresh_at_if_decrease(time+(relative_time && time%(24*60*60) >= 60 ? -60 : 0)); //refresh at "time" (if countdown active, refresh already 60 minutes before that)
 	}
 }
 
@@ -259,20 +265,14 @@ void display_data() { //(Re-)creates all the layers for items in the database an
 		//Add item layers
 		y = create_item_layers(y, window_layer, item, last_separator_date, num_separators == 0)+1;
 		
-		//Schedule refresh for when the item starts or ends
-		if ((refresh_at == 0 || refresh_at > item->start_time) && item->start_time > now)
-			refresh_at = item->start_time;
-		if (refresh_at == 0 || refresh_at > item->end_time)
-			refresh_at = item->end_time;
+		//refresh_at is set by time_to_showstring() for shown times. Make sure that items disappear after their expiration even when not showing the time
+		if (item->end_time != 0)
+			set_refresh_at_if_decrease(item->end_time);
 		
 		previous_item = item;
 	}
 	
 	items_biggest_y = y;
-	
-	//Adjust refresh_at for countdown functionality. The other adjustment (for when a countdown is currently active) happens in the time_to_showstring() function
-	if (refresh_at%(60*60) >=60)
-		refresh_at -= 60; //so that we can begin the countdown there //TODO this may cause too often refreshes (since the next refresh_at item doesn't necessarily want countdowns). Possibly use countdown_offset = (item->row1design & ROW_DESIGN_TIME_COUNTDOWN) || (item->row2design & ROW_DESIGN_TIME_COUNTDOWN) ? 60 : 0;
 }
 
 void remove_displayed_data() { //tidies up anything that display_data() created
@@ -367,6 +367,7 @@ static void handle_time_tick(struct tm *tick_time, TimeUnits units_changed) { //
 	if (bluetooth_connection_service_peek() && (time(NULL)-last_sync > 60*30-60*20*elapsed_item_num || time(NULL) < last_sync))
 		send_sync_request(last_sync_id);
 	
+	//APP_LOG(APP_LOG_LEVEL_DEBUG, "refresh_at = %ld (h:%ld m:%ld)", refresh_at, caltime_get_hour(refresh_at), caltime_get_minute(refresh_at));
 	//check whether we crossed the refresh_at threshold (e.g., item finished and has to be removed. Or item starts and now has to show endtime...)
 	if ((tick_time->tm_hour == 0 && tick_time->tm_min == 0) || (refresh_at != 0 && tm_to_caltime(tick_time) >= refresh_at)) {
 		APP_LOG(APP_LOG_LEVEL_DEBUG, "Refreshing currently shown items");
@@ -538,6 +539,22 @@ void scroll(int y) { //scolls so that the top of the window is offset by y
       }, NULL);
     animation_schedule((Animation*) scroll_animation);
 	scroll_position = y;
+}
+
+void vibrate(uint8_t type) {
+	switch (type) {
+		case 0:
+			return;
+		case 1:
+			vibes_short_pulse();
+			break;
+		case 2:
+			vibes_double_pulse();
+			break;
+		case 3:
+			vibes_long_pulse();
+			break;
+	}
 }
 
 //Create all necessary structures, etc.

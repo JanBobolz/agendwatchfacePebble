@@ -22,6 +22,7 @@
 #define DICT_KEY_ITEM_ENDTIME 30
 #define DICT_KEY_ITEM_INDEX 5
 #define DICT_KEY_SETTINGS_BOOLFLAGS 40
+#define DICT_KEY_VIBRATE 6
 
 //Outgoing dictionary keys
 #define DICT_OUT_KEY_VERSION 0
@@ -159,6 +160,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				
 				APP_LOG(APP_LOG_LEVEL_DEBUG, "Sync done");
 				sync_layer_set_progress(0,0);
+				vibrate(dict_find(received, DICT_KEY_VIBRATE)->value->uint8);
 			}
 			else {//phone thinks it's done but at some point, we began ignoring (yet ack'ing) its messages. So we request a restart
 				send_sync_request(0);
