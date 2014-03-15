@@ -18,7 +18,7 @@ char **item_texts = 0; //list of texts. item_text[i] corresponds to item_layer[i
 //Font according to settings
 GFont font; //font to use for items (and separators)
 GFont font_bold; //corresponding bold font
-int line_height; //will contain height of a line (row) in an item (depends on chosen font height)
+int line_height = 0; //will contain height of a line (row) in an item (depends on chosen font height)
 int font_index; //contains a two-bit number for the chosen font according to the settings
 
 int num_separators = 0; //number of separators. As many elements will be in the day_separator_layers array
@@ -332,7 +332,7 @@ void update_clock() { //updates the layer for the current time (if exists)
 		return;
 	static char time_text[] = "00:00";
 	clock_copy_time_string(time_text, sizeof(time_text));
-	text_layer_set_text(text_layer_time,  time_text);
+	text_layer_set_text(text_layer_time, time_text);
 }
 
 void update_date(struct tm *time) { //updates the layer for the current date (if exists)
@@ -350,11 +350,17 @@ void update_date(struct tm *time) { //updates the layer for the current date (if
 	
 	if (text_layer_weekday != 0) {
 		static char weekday_text[] = "Wednesday";
+		uint8_t battery_percent = battery_state_service_peek().charge_percent;
 		
-		if (header_time_width <= 75) //if time takes much vertical space, abbreviate
-			strftime(weekday_text, sizeof(weekday_text), "%A", time); //don't abbreviate
-		else
-			strftime(weekday_text, sizeof(weekday_text), "%a", time); //abbreviate
+		if (battery_percent <= 20) {
+			snprintf(weekday_text, sizeof(weekday_text), header_time_width <= 75 ? "Bat: %d %%" : "B: %d%%", battery_percent);
+		}
+		else {
+			if (header_time_width <= 75) //if time takes much vertical space, abbreviate
+				strftime(weekday_text, sizeof(weekday_text), "%A", time); //don't abbreviate
+			else
+				strftime(weekday_text, sizeof(weekday_text), "%a", time); //abbreviate
+		}
 		
 		weekday_text[sizeof(weekday_text)-1] = 0;
 		text_layer_set_text(text_layer_weekday, weekday_text);
@@ -370,7 +376,7 @@ static void handle_time_tick(struct tm *tick_time, TimeUnits units_changed) { //
 		update_date(tick_time);
 	
 	//check whether we should try for an update (if connected and last sync was more than (30-20*elapsed_item_num) minutes ago). Also when time went backward (time zoning/DST)
-	if (bluetooth_connection_service_peek() && (time(NULL)-last_sync > 60*30-60*20*elapsed_item_num || time(NULL) < last_sync))
+	if (time(NULL)-last_sync > 60*30-60*20*elapsed_item_num || time(NULL) < last_sync)
 		send_sync_request(last_sync_id);
 	
 	//APP_LOG(APP_LOG_LEVEL_DEBUG, "refresh_at = %ld (h:%ld m:%ld)", refresh_at, caltime_get_hour(refresh_at), caltime_get_minute(refresh_at));
@@ -381,6 +387,11 @@ static void handle_time_tick(struct tm *tick_time, TimeUnits units_changed) { //
 		remove_displayed_data();
 		display_data();
 	}
+}
+
+static void handle_battery(BatteryChargeState charge_state) {
+	time_t now = time(NULL);
+	update_date(localtime(&now));
 }
 
 //Populates time_font, time_font_id and header_height
@@ -491,8 +502,10 @@ void scroll_reset_timer_callback(void* data) {
 
 //Reacts to tap event by scrolling and preparing to reset the scrolling position
 void accel_tap_handler(AccelAxisType axis, int32_t direction) {
+	int scroll_amount = line_height == 0 ? 130 : 168-3*line_height; //scroll about half the visible lines away
+	
 	if (scroll_animation == 0) { //only when animation is finished
-		scroll(scroll_position+168 > items_biggest_y ? 0 : scroll_position+130+168 > items_biggest_y ? items_biggest_y-168+1 : scroll_position+130);
+		scroll(scroll_position+168 > items_biggest_y ? 0 : scroll_position+scroll_amount+168 > items_biggest_y ? items_biggest_y-168+1 : scroll_position+scroll_amount);
 		
 		if (scroll_reset_timer != 0) {
 			app_timer_cancel(scroll_reset_timer);
@@ -590,6 +603,7 @@ void handle_init(void) {
 	
 	//Register services
 	tick_timer_service_subscribe(MINUTE_UNIT, &handle_time_tick);
+	battery_state_service_subscribe(&handle_battery);
 	
 	//Register for communication events
 	app_message_register_inbox_received(in_received_handler);	
@@ -608,6 +622,7 @@ void handle_deinit(void) {
 	//Unsubscribe callbacks
 	accel_tap_service_unsubscribe();
 	tick_timer_service_unsubscribe();
+	battery_state_service_unsubscribe();
 	app_message_deregister_callbacks();
 	
 	//Destroy ui
