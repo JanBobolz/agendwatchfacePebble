@@ -146,9 +146,14 @@ int create_item_layers(int y, Layer* parent, AgendaItem* item, caltime_t relativ
 		//Convenience variables
 		uint8_t row_design = row == 0 ? item->row1design : item->row2design;
 		uint8_t design_time = (row_design/ROW_DESIGN_TIME_TYPE_OFFSET)%0x8;
+		uint8_t row_overflow = (row_design/ROW_DESIGN_TEXT_OVERFLOW_OFFSET)%0x4;
 		char* row_text = row == 0 ? item->row1text : item->row2text;
 		
+		//Figure out height of this line and the width of the time
 		int time_layer_width = get_item_text_offset(row_design, design_time==3 ? 2 : 1, (settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0); //desired width of time layer
+		int line_height_factor = row_overflow == 2 ? 2 : 1;
+		if (row_overflow == 1 && graphics_text_layout_get_content_size(row_text, row_design & ROW_DESIGN_TEXT_BOLD ? font_bold : font, GRect(time_layer_width,y,144-time_layer_width,line_height*2), GTextOverflowModeFill, GTextAlignmentLeft).h > line_height)  //row_overflow == 1: overflow if necessary
+			line_height_factor = 2;
 		
 		//Create time text and layer
 		if (design_time != 0) { //should we show any time at all?
@@ -165,7 +170,7 @@ int create_item_layers(int y, Layer* parent, AgendaItem* item, caltime_t relativ
 				time_to_showstring(item_texts[num_layers]+strlen(item_texts[num_layers]), 10, item->end_time, relative_to, relative_time && get_current_time() >= item->start_time, settings & SETTINGS_BOOL_12H ? 1 : 0, (settings & SETTINGS_BOOL_12H) && (settings & SETTINGS_BOOL_AMPM) ? 1 : 0, true);
 		
 			//Create time layer
-			TextLayer *layer = text_layer_create(GRect(0,y,time_layer_width,line_height));
+			TextLayer *layer = text_layer_create(GRect(0,y,time_layer_width,line_height*line_height_factor));
 			text_layer_set_background_color(layer, GColorWhite);
 			text_layer_set_text_color(layer, GColorBlack);
 			text_layer_set_font(layer, font);
@@ -176,23 +181,24 @@ int create_item_layers(int y, Layer* parent, AgendaItem* item, caltime_t relativ
 		
 		//Create text layer
 		if (row_text != 0) { //should we show any text at all?
-			item_texts[num_layers] = malloc(30*sizeof(char));
-			strncpy(item_texts[num_layers], row_text, 30);
+			item_texts[num_layers] = malloc(50*sizeof(char));
+			strncpy(item_texts[num_layers], row_text, 50);
 		}
 		else
 			item_texts[num_layers] = 0;
 		
-		//Text layer
-		TextLayer *layer = text_layer_create(GRect(time_layer_width,y,144-time_layer_width,line_height));
+		//Create text layer
+		TextLayer *layer = text_layer_create(GRect(time_layer_width,y,144-time_layer_width,line_height*line_height_factor));
 		text_layer_set_background_color(layer, GColorWhite);
 		text_layer_set_text_color(layer, GColorBlack);
 		text_layer_set_font(layer, row_design & ROW_DESIGN_TEXT_BOLD ? font_bold : font);
+		text_layer_set_overflow_mode(layer, GTextOverflowModeFill);
 		if (item_texts[num_layers] != 0)
 			text_layer_set_text(layer, item_texts[num_layers]);
 		layer_add_child(parent, text_layer_get_layer(layer));
 		item_layers[num_layers++] = layer;
 		
-		y+=line_height; //add this line's height to y for return value
+		y+=line_height*line_height_factor; //add this line's height to y for return value
 	}
 	
 	return y; //screen offset where this item's layers end
@@ -486,7 +492,7 @@ void scroll_reset_timer_callback(void* data) {
 //Reacts to tap event by scrolling and preparing to reset the scrolling position
 void accel_tap_handler(AccelAxisType axis, int32_t direction) {
 	if (scroll_animation == 0) { //only when animation is finished
-		scroll(scroll_position+168 > items_biggest_y ? 0 : scroll_position+150+168 > items_biggest_y ? items_biggest_y-168+1 : scroll_position+150);
+		scroll(scroll_position+168 > items_biggest_y ? 0 : scroll_position+130+168 > items_biggest_y ? items_biggest_y-168+1 : scroll_position+130);
 		
 		if (scroll_reset_timer != 0) {
 			app_timer_cancel(scroll_reset_timer);

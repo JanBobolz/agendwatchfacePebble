@@ -31,11 +31,12 @@
 
 //Commands from phone
 #define COMMAND_INIT_DATA 0
-#define COMMAND_EVENT 1
+#define COMMAND_ITEM 1
 #define COMMAND_DONE 2
-#define COMMAND_EVENT_TIME 3
 #define COMMAND_NO_NEW_DATA 4
 #define COMMAND_FORCE_REQUEST 5
+#define COMMAND_ITEM_1 6
+#define COMMAND_ITEM_2 7
 
 AgendaItem **buffer = 0; //buffered items so far
 uint8_t buffer_size = 0; //number of elements in the buffer (for cleanup)
@@ -43,6 +44,7 @@ uint8_t number_received = 0; //number of items completely received
 uint8_t number_expected = 0; //number of items the phone said it will send
 uint8_t index_expected = 0; //index that the next received item should carry (other messages will be ignored)
 uint8_t current_sync_id = 0; //id of the current sync (as reported by phone)
+bool expecting_second_half = false; //true if we still need the second half of the current item
 bool update_request_sent = 0; //whether or not we informed the phone about outdated version
 
 void send_sync_request(uint8_t report_sync_id) { //Sends a request for fresh data to the phone. Report report_sync_id as last successful sync (0 to force sync)
@@ -123,7 +125,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				handle_no_new_data();
 			break;
 			
-			case COMMAND_EVENT: //getting an item
+			case COMMAND_ITEM: //getting an item
 			if (number_expected-number_received != 0 && number_expected != 0) { //check if message is expected				
 				if (index_expected != dict_find(received, DICT_KEY_ITEM_INDEX)->value->uint8) {
 					APP_LOG(APP_LOG_LEVEL_DEBUG, "got unexpected event (wrong index). Ignoring");
@@ -137,6 +139,38 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				set_item_times(buffer[number_received], dict_find(received, DICT_KEY_ITEM_STARTTIME)->value->int32, dict_find(received, DICT_KEY_ITEM_ENDTIME)->value->int32);
 				number_received++;
 				index_expected++;
+				expecting_second_half = false;
+				sync_layer_set_progress(number_received+1, number_expected+2);
+			}
+			break;
+			
+			case COMMAND_ITEM_1: //getting an item half
+			if (number_expected-number_received != 0 && number_expected != 0) { //check if message is expected				
+				if (index_expected != dict_find(received, DICT_KEY_ITEM_INDEX)->value->uint8) {
+					APP_LOG(APP_LOG_LEVEL_DEBUG, "got unexpected event (wrong index). Ignoring");
+					break;
+				}
+				
+				buffer[number_received] = create_agenda_item();
+				buffer_size++;
+				set_item_row1(buffer[number_received], dict_find(received, DICT_KEY_ITEM_TEXT1)->value->cstring, dict_find(received, DICT_KEY_ITEM_DESIGN1)->value->uint8);
+				set_item_start_time(buffer[number_received], dict_find(received, DICT_KEY_ITEM_STARTTIME)->value->int32);				
+				expecting_second_half = true;
+			}
+			break;
+			
+			case COMMAND_ITEM_2: //getting second item half
+			if (number_expected-number_received != 0 && number_expected != 0) { //check if message is expected				
+				if (index_expected != dict_find(received, DICT_KEY_ITEM_INDEX)->value->uint8 || !expecting_second_half) {
+					APP_LOG(APP_LOG_LEVEL_DEBUG, "got unexpected event (wrong index/not expecting second half). Ignoring");
+					break;
+				}
+				
+				set_item_row2(buffer[number_received], dict_find(received, DICT_KEY_ITEM_TEXT2)->value->cstring, dict_find(received, DICT_KEY_ITEM_DESIGN2)->value->uint8);
+				set_item_end_time(buffer[number_received], dict_find(received, DICT_KEY_ITEM_ENDTIME)->value->int32);
+				number_received++;
+				index_expected++;
+				expecting_second_half = false;
 				sync_layer_set_progress(number_received+1, number_expected+2);
 			}
 			break;

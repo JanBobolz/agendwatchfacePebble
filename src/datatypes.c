@@ -23,6 +23,14 @@ void set_item_times(AgendaItem* item, caltime_t start, caltime_t end) {
 	item->end_time = end;
 }
 
+void set_item_start_time(AgendaItem* item, caltime_t start) {
+	item->start_time = start;
+}
+
+void set_item_end_time(AgendaItem* item, caltime_t end) {
+	item->end_time = end;
+}
+
 
 /*void cal_set_title_and_loc(CalendarEvent* event, char* title, char* location) {//strings will be (deep-)copied and truncated if necessary
 	strncpy(event->title, title, sizeof(event->title));

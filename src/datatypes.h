@@ -6,9 +6,13 @@
 #define ROW_DESIGN_HIDE 0
 //the first of three bits that make up the constant (from Android TimeDisplayType enum) what kind of times should be shown
 #define ROW_DESIGN_TIME_TYPE_OFFSET 0x02
+//0x04,0x08 belong to ROW_DESIGN_TIME_TYPE_OFFSET
 #define ROW_DESIGN_TIME_COUNTDOWN 0x10
 #define ROW_DESIGN_TEXT_BOLD 0x20
-
+//the first of two bits that make up the constant (from Android LineOverflowBehavior)
+#define ROW_DESIGN_TEXT_OVERFLOW_OFFSET 0x40
+//0x80 belongs to ROW_DESIGN_TEXT_OVERFLOW_OFFSET
+	
 typedef int32_t caltime_t; //in format: minutes + 60*hours + 60*24*weekday + 60*24*7*dayOfMonth + 60*24*7*32*(month-1) + 60*24*7*32*12*(year-1900). It holds that weekday == 0 <=> monday
 //This format is good for (way) longer than 2038. Also, PebbleOS 2.0 does not support time manipulation at the moment,
 //so something else was needed. caltime_t has all necessary information.
@@ -16,8 +20,8 @@ typedef int32_t caltime_t; //in format: minutes + 60*hours + 60*24*weekday + 60*
 //However, no time arithmetic should be done one this directly. There is nothing accounting even for the number of days in a certain month...
 
 typedef struct {
-	char row1text[30];
-	char row2text[30];
+	char row1text[50];
+	char row2text[50];
 	
 	uint8_t row1design, row2design;
 	
@@ -30,6 +34,8 @@ AgendaItem* create_agenda_item();
 void set_item_row1(AgendaItem* item, char* text, uint8_t design);
 void set_item_row2(AgendaItem* item, char* text, uint8_t design);
 void set_item_times(AgendaItem* item, caltime_t start, caltime_t end);
+void set_item_start_time(AgendaItem* item, caltime_t start);
+void set_item_end_time(AgendaItem* item, caltime_t end);
 
 caltime_t tm_to_caltime(struct tm *t);
 caltime_t tm_to_caltime_date_only(struct tm *t);
