@@ -127,7 +127,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 			
 			case COMMAND_ITEM: //getting an item
 			if (number_expected-number_received != 0 && number_expected != 0) { //check if message is expected				
-				if (index_expected != dict_find(received, DICT_KEY_ITEM_INDEX)->value->uint8) {
+				if (index_expected != dict_find(received, DICT_KEY_ITEM_INDEX)->value->uint8 || expecting_second_half) {
 					APP_LOG(APP_LOG_LEVEL_DEBUG, "got unexpected event (wrong index). Ignoring");
 					break;
 				}
@@ -146,8 +146,8 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 			
 			case COMMAND_ITEM_1: //getting an item half
 			if (number_expected-number_received != 0 && number_expected != 0) { //check if message is expected				
-				if (index_expected != dict_find(received, DICT_KEY_ITEM_INDEX)->value->uint8) {
-					APP_LOG(APP_LOG_LEVEL_DEBUG, "got unexpected event (wrong index). Ignoring");
+				if (index_expected != dict_find(received, DICT_KEY_ITEM_INDEX)->value->uint8 || expecting_second_half) {
+					APP_LOG(APP_LOG_LEVEL_DEBUG, "got unexpected event (wrong index/expecting second half). Ignoring");
 					break;
 				}
 				
