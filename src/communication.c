@@ -197,7 +197,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				vibrate(dict_find(received, DICT_KEY_VIBRATE)->value->uint8);
 			}
 			else {//phone thinks it's done but at some point, we began ignoring (yet ack'ing) its messages. So we request a restart
-				send_sync_request(0);
+				handle_sync_failed();
 				APP_LOG(APP_LOG_LEVEL_DEBUG, "Phone finished sync but something went wrong - requesting restart");
 			}
 			app_comm_set_sniff_interval(SNIFF_INTERVAL_NORMAL); //stop heightened communcation

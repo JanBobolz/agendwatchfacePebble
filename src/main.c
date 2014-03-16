@@ -323,6 +323,11 @@ void handle_new_data(uint8_t sync_id) { //Sync done. Show new data from database
 	scroll(0);
 }
 
+void handle_sync_failed() {
+	last_sync = 0;
+	send_sync_request(last_sync_id);
+}
+
 void handle_data_gone() { //Database will go down. Stop showing stuff
 	remove_displayed_data();
 }
