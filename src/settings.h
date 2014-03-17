@@ -29,6 +29,9 @@
 	
 //Whether or not to scroll on accelerometer tap
 #define SETTINGS_BOOL_ENABLE_SCROLL 0x400
+
+//Whether or not to display the remaining minutes instead of the time in events
+#define SETTINGS_BOOL_COUNTDOWNS 0x800
 	
 void settings_persist(); //saves settings to persistent storage. (Does not have to be called from outside settings.c)
 void settings_restore_persisted(); //restores settings from persistent storage (if exists)

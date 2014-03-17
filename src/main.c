@@ -269,7 +269,7 @@ void display_data() { //(Re-)creates all the layers for items in the database an
 		}
 		
 		//Add item layers
-		y = create_item_layers(y, window_layer, item, last_separator_date, num_separators == 0)+1;
+		y = create_item_layers(y, window_layer, item, last_separator_date, (settings_get_bool_flags() & SETTINGS_BOOL_COUNTDOWNS) && num_separators == 0)+1;
 		
 		//refresh_at is set by time_to_showstring() for shown times. Make sure that items disappear after their expiration even when not showing the time
 		if (item->end_time != 0)
