@@ -357,7 +357,7 @@ void update_date(struct tm *time) { //updates the layer for the current date (if
 		static char weekday_text[] = "Wednesday";
 		uint8_t battery_percent = battery_state_service_peek().charge_percent;
 		
-		if (battery_percent <= 20) {
+		if (battery_percent <= 20 || battery_state_service_peek().is_charging) {
 			snprintf(weekday_text, sizeof(weekday_text), header_time_width <= 75 ? "Bat: %d %%" : "B: %d%%", battery_percent);
 		}
 		else {
@@ -386,7 +386,7 @@ static void handle_time_tick(struct tm *tick_time, TimeUnits units_changed) { //
 	
 	//APP_LOG(APP_LOG_LEVEL_DEBUG, "refresh_at = %ld (h:%ld m:%ld)", refresh_at, caltime_get_hour(refresh_at), caltime_get_minute(refresh_at));
 	//check whether we crossed the refresh_at threshold (e.g., item finished and has to be removed. Or item starts and now has to show endtime...)
-	if ((tick_time->tm_hour == 0 && tick_time->tm_min == 0) || (refresh_at != 0 && tm_to_caltime(tick_time) >= refresh_at)) {
+	if ((tick_time->tm_hour == 0 && tick_time->tm_min == 0) || (refresh_at != 0 && tm_to_caltime(tick_time) > refresh_at)) {
 		APP_LOG(APP_LOG_LEVEL_DEBUG, "Refreshing currently shown items");
 		//Reset what's displayed and redisplay
 		remove_displayed_data();
@@ -510,7 +510,7 @@ void accel_tap_handler(AccelAxisType axis, int32_t direction) {
 	int scroll_amount = line_height == 0 ? 130 : 168-3*line_height; //scroll about half the visible lines away
 	
 	if (scroll_animation == 0) { //only when animation is finished
-		scroll(scroll_position+168 > items_biggest_y ? 0 : scroll_position+scroll_amount+168 > items_biggest_y ? items_biggest_y-168+1 : scroll_position+scroll_amount);
+		scroll(scroll_position+168 > items_biggest_y ? 0 : scroll_position+scroll_amount+168+10 > items_biggest_y ? items_biggest_y-168+1 : scroll_position+scroll_amount); //the +10 are to make these "tiny-step" scrollings to the end rarer
 		
 		if (scroll_reset_timer != 0) {
 			app_timer_cancel(scroll_reset_timer);
