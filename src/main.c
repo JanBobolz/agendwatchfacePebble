@@ -513,14 +513,14 @@ void scroll_reset_timer_callback(void* data) {
 
 //Reacts to tap event by scrolling and preparing to reset the scrolling position
 void accel_tap_handler(AccelAxisType axis, int32_t direction) {
-	if (settings_get_bool_flags()&SETTINGS_BOOL_ENABLED_ALT_SCROLL) {
+	if (settings_get_bool_flags() & SETTINGS_BOOL_ENABLED_ALT_SCROLL) {
 		if (scroll_reset_timer != 0) {
 			app_timer_cancel(scroll_reset_timer);
 			scroll_reset_timer = 0;
 		}
 		scroll_reset_timer = app_timer_register(30000, scroll_reset_timer_callback, NULL); //set timer to reset scroll position to 0
 		start_scroll_continuously();
-	} else if (!(settings_get_bool_flags()&SETTINGS_BOOL_ENABLED_ALT_SCROLL) && scroll_animation == 0) {
+	} else if (!(settings_get_bool_flags() & SETTINGS_BOOL_ENABLED_ALT_SCROLL) && scroll_animation == 0) {
 		int scroll_amount = line_height == 0 ? 130 : 168-3*line_height; //scroll about half the visible lines away
 		scroll(scroll_position+168 > items_biggest_y ? 0 : scroll_position+scroll_amount+168+10 > items_biggest_y ? items_biggest_y-168+1 : scroll_position+scroll_amount); //the +10 are to make these "tiny-step" scrollings to the end rarer
 		
@@ -531,6 +531,8 @@ void accel_tap_handler(AccelAxisType axis, int32_t direction) {
 		if (scroll_position != 0) //set by scroll()
 			scroll_reset_timer = app_timer_register(7000, scroll_reset_timer_callback, NULL); //set timer to reset scroll position to 0
 	}
+	if (settings_get_bool_flags() & SETTINGS_BOOL_LIGHT_WHILE_SCROLLING)
+		light_enable_interaction();
 }
 
 //Callback if settings changed (also called in handle_init()). We'll simply destroy everything, recreate the header if still set to. Calendar data will be shown again after sync is done
@@ -615,16 +617,18 @@ void continuous_animation_impl(struct Animation *animation, const uint32_t time_
 		anim_last_milestone_ms = now_ms;
 		AccelData data;
 		accel_service_peek(&data);
-		if (data.y < 0 && data.y > -600)
+		if (data.y < 0 && data.y > -500)
 			anim_scroll_speed = 0;
-		else if (data.y < -800)
+		else if (data.y < -700)
 			anim_scroll_speed = 200;
-		else if (data.y <= -600)
+		else if (data.y <= -500)
 			anim_scroll_speed = 50;
 		else if (data.y >= 300)
-			anim_scroll_speed = -300;
+			anim_scroll_speed = -350;
 		else if (data.y >= 0)
 			anim_scroll_speed = -50;
+		if (settings_get_bool_flags() & SETTINGS_BOOL_LIGHT_WHILE_SCROLLING)
+			light_enable_interaction();
 	}
 }
 
@@ -641,7 +645,7 @@ void start_scroll_continuously() {
 	animation_set_duration((struct Animation*) continuous_scroll_anim, ANIMATION_DURATION_INFINITE);
 	animation_set_implementation((struct Animation*) continuous_scroll_anim, &my_implementation);
     time_ms(&anim_last_milestone_s, &anim_last_milestone_ms);
-	anim_scroll_speed = 500;
+	anim_scroll_speed = 20;
 	anim_last_milestone_y = scroll_position;
 	animation_schedule((Animation*) continuous_scroll_anim);
 	accel_data_service_subscribe(0, NULL);
