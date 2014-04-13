@@ -37,6 +37,12 @@ AppTimer* scroll_reset_timer = 0; //timer handle to reset scroll position after 
 int scroll_position = 0; //current y-axis scrolling position (or the one that's being scrolled to)
 int items_biggest_y = 0; //the y position of the last displayed item
 
+Animation* continuous_scroll_anim = 0; //current continuous scroll animation or 0
+time_t anim_last_milestone_s = 0; //time in seconds of the last milestone (i.e. the last time, scroll speed has been reset)
+uint16_t anim_last_milestone_ms = 0; //the milisecond part of anim_last_milestone_s
+int anim_last_milestone_y = 0; //the scroll_position at the previous milestone
+int16_t anim_scroll_speed = 0; //the speed of scrolling (positive: down) in pixels per second
+
 GFont time_font = 0; //Font for current time (custom font)
 GFont date_font; //Font for the current date (system font)
 int time_font_id = -1; //id of time_font according to Android settings (-1 being not loaded)
@@ -507,9 +513,15 @@ void scroll_reset_timer_callback(void* data) {
 
 //Reacts to tap event by scrolling and preparing to reset the scrolling position
 void accel_tap_handler(AccelAxisType axis, int32_t direction) {
-	int scroll_amount = line_height == 0 ? 130 : 168-3*line_height; //scroll about half the visible lines away
-	
-	if (scroll_animation == 0) { //only when animation is finished
+	if (settings_get_bool_flags()&SETTINGS_BOOL_ENABLED_ALT_SCROLL) {
+		if (scroll_reset_timer != 0) {
+			app_timer_cancel(scroll_reset_timer);
+			scroll_reset_timer = 0;
+		}
+		scroll_reset_timer = app_timer_register(30000, scroll_reset_timer_callback, NULL); //set timer to reset scroll position to 0
+		start_scroll_continuously();
+	} else if (!(settings_get_bool_flags()&SETTINGS_BOOL_ENABLED_ALT_SCROLL) && scroll_animation == 0) {
+		int scroll_amount = line_height == 0 ? 130 : 168-3*line_height; //scroll about half the visible lines away
 		scroll(scroll_position+168 > items_biggest_y ? 0 : scroll_position+scroll_amount+168+10 > items_biggest_y ? items_biggest_y-168+1 : scroll_position+scroll_amount); //the +10 are to make these "tiny-step" scrollings to the end rarer
 		
 		if (scroll_reset_timer != 0) {
@@ -545,12 +557,14 @@ void scroll_animation_started(Animation *animation, void *data) {
 }
 
 void scroll_animation_stopped(Animation *animation, bool finished, void *data) {
-   scroll_cleanup();
+	scroll_cleanup();
 }
 
-void scroll(int y) { //scolls so that the top of the window is offset by y
+void scroll(int y) { //scolls so that the top of the window is offset by y (also ends continuous scrolling if active)
 	if (scroll_animation != 0) //animation still running
 		return;
+	if (continuous_scroll_anim != 0) //stop continuous scrolling
+		continuous_scroll_cleanup();
 	
 	GRect from_frame = layer_get_frame(root_layer);
     GRect to_frame = GRect(0, -y, from_frame.size.w, from_frame.size.h);
@@ -563,6 +577,74 @@ void scroll(int y) { //scolls so that the top of the window is offset by y
       }, NULL);
     animation_schedule((Animation*) scroll_animation);
 	scroll_position = y;
+}
+
+//Stops continuous scrolling and cleans up everything (safe to call at any point in time)
+void continuous_scroll_cleanup() {
+	if (continuous_scroll_anim != 0) {
+		animation_unschedule(continuous_scroll_anim);
+		animation_destroy(continuous_scroll_anim);
+	}
+	continuous_scroll_anim = 0;
+	accel_data_service_unsubscribe();
+}
+
+//Implements the continuous scrolling behavior. This function is automatically called from time to time while the animation runs. From time to time, it sets a milestone, reading the acceloremeter to check for new scrolling direction. This function also ends the scrolling process when appropriate
+void continuous_animation_impl(struct Animation *animation, const uint32_t time_normalized) {
+	static time_t now_s = 0;
+	static uint16_t now_ms = 0;
+	time_ms(&now_s, &now_ms);
+	
+	//How much time (in ms) has passed since last milestone?
+	int time_delta = (now_s-anim_last_milestone_s)*1000+(now_ms-anim_last_milestone_ms);
+
+	//Move by that much
+	scroll_position = anim_last_milestone_y+time_delta*anim_scroll_speed/1000;
+	if (scroll_position < 0) { //end scrolling when we're at the top again
+		scroll_position = 0;
+		continuous_scroll_cleanup();
+	} else if (scroll_position > items_biggest_y-168+1) {
+		scroll_position = items_biggest_y-168+1;
+	}
+	layer_set_frame(root_layer, GRect(0,-scroll_position,144,168));
+	
+	//Is it time for a new milestone yet?
+	if (time_delta > 100) {
+		anim_last_milestone_y = scroll_position;
+		anim_last_milestone_s = now_s;
+		anim_last_milestone_ms = now_ms;
+		AccelData data;
+		accel_service_peek(&data);
+		if (data.y < 0 && data.y > -600)
+			anim_scroll_speed = 0;
+		else if (data.y < -800)
+			anim_scroll_speed = 200;
+		else if (data.y <= -600)
+			anim_scroll_speed = 50;
+		else if (data.y >= 300)
+			anim_scroll_speed = -300;
+		else if (data.y >= 0)
+			anim_scroll_speed = -50;
+	}
+}
+
+//Starts the continuous scrolling. Technically, that's an animation runs continuously, checking the accelerometer for instructions
+void start_scroll_continuously() {
+	static const AnimationImplementation my_implementation = {
+	  .update = (AnimationUpdateImplementation) continuous_animation_impl
+	};
+	if (continuous_scroll_anim != 0) //animation still running
+		return;
+
+	//Start the scroll animation
+    continuous_scroll_anim = animation_create();
+	animation_set_duration((struct Animation*) continuous_scroll_anim, ANIMATION_DURATION_INFINITE);
+	animation_set_implementation((struct Animation*) continuous_scroll_anim, &my_implementation);
+    time_ms(&anim_last_milestone_s, &anim_last_milestone_ms);
+	anim_scroll_speed = 500;
+	anim_last_milestone_y = scroll_position;
+	animation_schedule((Animation*) continuous_scroll_anim);
+	accel_data_service_subscribe(0, NULL);
 }
 
 void vibrate(uint8_t type) {
@@ -626,6 +708,7 @@ void handle_init(void) {
 void handle_deinit(void) {
 	//Unsubscribe callbacks
 	accel_tap_service_unsubscribe();
+	accel_data_service_unsubscribe();
 	tick_timer_service_unsubscribe();
 	battery_state_service_unsubscribe();
 	app_message_deregister_callbacks();
@@ -649,6 +732,7 @@ void handle_deinit(void) {
 	db_reset();
 	communication_cleanup();
 	scroll_cleanup();
+	continuous_scroll_cleanup();
 	if (scroll_reset_timer != 0)
 		app_timer_cancel(scroll_reset_timer);
 }

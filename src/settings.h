@@ -32,6 +32,9 @@
 
 //Whether or not to display the remaining minutes instead of the time in events
 #define SETTINGS_BOOL_COUNTDOWNS 0x800
+
+//Whether or not to use the new scrolling paradigm (tap, then scroll)
+#define SETTINGS_BOOL_ENABLED_ALT_SCROLL 0x1000
 	
 void settings_persist(); //saves settings to persistent storage. (Does not have to be called from outside settings.c)
 void settings_restore_persisted(); //restores settings from persistent storage (if exists)
