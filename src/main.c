@@ -406,6 +406,12 @@ static void handle_battery(BatteryChargeState charge_state) {
 	update_date(localtime(&now));
 }
 
+void bluetooth_connection_callback(bool connected) {
+	if (connected)
+		last_sync = 0; //force sync
+	sync_layer_set_progress(0, connected ? 0 : 1);	
+}
+
 //Populates time_font, time_font_id and header_height
 void set_time_font_from_settings() {
 	int time_font_id_new = (int) ((settings_get_bool_flags() & (SETTINGS_BOOL_HEADER_SIZE0|SETTINGS_BOOL_HEADER_SIZE1))/SETTINGS_BOOL_HEADER_SIZE0); //figure out index of the font from settings (two-bit number)
@@ -704,6 +710,7 @@ void handle_init(void) {
 	//Register services
 	tick_timer_service_subscribe(MINUTE_UNIT, &handle_time_tick);
 	battery_state_service_subscribe(&handle_battery);
+	bluetooth_connection_service_subscribe(bluetooth_connection_callback);
 	
 	//Register for communication events
 	app_message_register_inbox_received(in_received_handler);	
@@ -724,6 +731,7 @@ void handle_deinit(void) {
 	accel_data_service_unsubscribe();
 	tick_timer_service_unsubscribe();
 	battery_state_service_unsubscribe();
+	bluetooth_connection_service_unsubscribe();
 	app_message_deregister_callbacks();
 	
 	//Destroy ui
