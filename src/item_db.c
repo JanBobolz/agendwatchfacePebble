@@ -36,12 +36,13 @@ AgendaItem* db_get(const int offset) { //gives access to the offset'th item (zer
 	return db_items[offset];
 }
 
-void db_persist() { //saves database into persistent storage.
+void db_persist(uint8_t max_num) { //saves (part of) the database into persistent storage.
 	if (!dirty_bit)
 		return;
 	
-	persist_write_int(PERSIST_NUM_ELEMS, current_num_elems);
-	for (int i=0;i<current_num_elems;i++)
+	uint8_t num_elems = current_num_elems > max_num ? max_num : current_num_elems;
+	persist_write_int(PERSIST_NUM_ELEMS, num_elems);
+	for (int i=0;i<num_elems;i++)
 		persist_write_data(PERSIST_DB_PREFIX|i, db_items[i], sizeof(AgendaItem));
 }
 

@@ -42,6 +42,7 @@ time_t anim_last_milestone_s = 0; //time in seconds of the last milestone (i.e. 
 uint16_t anim_last_milestone_ms = 0; //the milisecond part of anim_last_milestone_s
 int anim_last_milestone_y = 0; //the scroll_position at the previous milestone
 int16_t anim_scroll_speed = 0; //the speed of scrolling (positive: down) in pixels per second
+uint8_t anim_num_milestones = 0; //number of passed milestones in the current scrolling process (to make deactivation harder at first)
 
 GFont time_font = 0; //Font for current time (custom font)
 GFont date_font; //Font for the current date (system font)
@@ -549,8 +550,10 @@ void handle_new_settings() {
 
 //Destroys current animation (not sure if this would be safe to call during a running animation)
 void scroll_cleanup() {
-	if (scroll_animation != 0)
+	if (scroll_animation != 0) {
+		animation_unschedule((struct Animation*) scroll_animation);
 		property_animation_destroy(scroll_animation);
+	}
 	scroll_animation = 0;
 }
 
@@ -601,17 +604,22 @@ void continuous_animation_impl(struct Animation *animation, const uint32_t time_
 	int time_delta = (now_s-anim_last_milestone_s)*1000+(now_ms-anim_last_milestone_ms);
 
 	//Move by that much
-	scroll_position = anim_last_milestone_y+time_delta*anim_scroll_speed/1000;
-	if (scroll_position < 0) { //end scrolling when we're at the top again
-		scroll_position = 0;
-		continuous_scroll_cleanup();
-	} else if (scroll_position > items_biggest_y-168+1) {
-		scroll_position = items_biggest_y-168+1;
+	if (anim_scroll_speed != 0) {
+		scroll_position = anim_last_milestone_y+time_delta*anim_scroll_speed/1000;
+		if (scroll_position < 0) { //end scrolling when we're at the top again
+			scroll_position = 0;
+			if (anim_num_milestones > 10) //be lenient with deactivation at first
+				continuous_scroll_cleanup();
+		} else if (scroll_position > items_biggest_y-168+1) {
+			scroll_position = items_biggest_y-168+1;
+		}
+		layer_set_frame(root_layer, GRect(0,-scroll_position,144,168));
 	}
-	layer_set_frame(root_layer, GRect(0,-scroll_position,144,168));
 	
 	//Is it time for a new milestone yet?
 	if (time_delta > 100) {
+		if (anim_num_milestones < 255) //prevent overflow
+			anim_num_milestones++;
 		anim_last_milestone_y = scroll_position;
 		anim_last_milestone_s = now_s;
 		anim_last_milestone_ms = now_ms;
@@ -647,8 +655,9 @@ void start_scroll_continuously() {
     time_ms(&anim_last_milestone_s, &anim_last_milestone_ms);
 	anim_scroll_speed = 20;
 	anim_last_milestone_y = scroll_position;
-	animation_schedule((Animation*) continuous_scroll_anim);
+	anim_num_milestones = 0;
 	accel_data_service_subscribe(0, NULL);
+	animation_schedule((Animation*) continuous_scroll_anim);
 }
 
 void vibrate(uint8_t type) {
@@ -728,7 +737,11 @@ void handle_deinit(void) {
 		fonts_unload_custom_font(time_font);
 	
 	//Write persistent data
-	db_persist();
+	if (settings_get_bool_flags() & SETTINGS_BOOL_LIMIT_PERSIST) {
+		last_sync_id = 0; //force sync next open
+		db_persist(5); //at most 5 elements persisted
+	} else 
+		db_persist(30);
 	persist_write_data(PERSIST_LAST_SYNC_ID, &last_sync_id, sizeof(last_sync_id));
 	//settings_persist(); //is persisted when new settings arrive
 	
@@ -742,7 +755,7 @@ void handle_deinit(void) {
 }
 
 int main(void) {
-	  handle_init();
-	  app_event_loop();
-	  handle_deinit();
+	handle_init();
+	app_event_loop();
+	handle_deinit();
 }

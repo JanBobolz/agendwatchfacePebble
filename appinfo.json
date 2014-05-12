@@ -1,37 +1,37 @@
 {
-    "versionLabel": "2.01",
-    "uuid": "1f366804-f1d2-4288-b71a-708661777887",
-    "appKeys": {},
-    "longName": "Agenda Watchface",
-    "versionCode": 9,
-    "capabilities": [
-        ""
-    ],
-    "shortName": "Agenda",
-    "companyName": "janbobolz",
-    "watchapp": {
-        "watchface": true
-    },
     "resources": {
         "media": [
             {
-                "menuIcon": true,
-                "type": "png",
-                "name": "IMAGE_ICON",
-                "file": "images/watch_icon.png"
+                "name": "FONT_ROBOTO_CONDENSED_30",
+                "characterRegex": "[0-9: ]",
+                "type": "font",
+                "file": "fonts/Roboto-Condensed-webfont.ttf"
             },
             {
+                "name": "FONT_ROBOTO_CONDENSED_BOLD_38",
                 "characterRegex": "[0-9 :]",
                 "type": "font",
-                "name": "FONT_ROBOTO_CONDENSED_BOLD_38",
                 "file": "fonts/Roboto-BoldCondensed-webfont.ttf"
             },
             {
-                "characterRegex": "[0-9: ]",
-                "type": "font",
-                "name": "FONT_ROBOTO_CONDENSED_30",
-                "file": "fonts/Roboto-Condensed-webfont.ttf"
+                "name": "IMAGE_ICON",
+                "menuIcon": true,
+                "type": "png",
+                "file": "images/watch_icon.png"
             }
         ]
-    }
+    },
+    "companyName": "janbobolz",
+    "shortName": "Agenda",
+    "uuid": "1f366804-f1d2-4288-b71a-708661777887",
+    "versionCode": 10,
+    "capabilities": [
+        ""
+    ],
+    "longName": "Agenda Watchface",
+    "watchapp": {
+        "watchface": true
+    },
+    "appKeys": {},
+    "versionLabel": "2.1"
 }

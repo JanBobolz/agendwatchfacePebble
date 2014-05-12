@@ -5,7 +5,7 @@
 #include <communication.h>
 
 //Version of the watchapp. Will be compared to what version the (updated) phone app expects
-#define WATCHAPP_VERSION 9
+#define WATCHAPP_VERSION 10
 #define BACKWARD_COMPAT_VERSION 8
 //BACKWARD_COMPAT_VERSION smallest version number that this version is backwards compatible to (so an Android app bundling that (older) version would still work)
 	
@@ -62,7 +62,7 @@ void send_sync_request(uint8_t report_sync_id) { //Sends a request for fresh dat
 }
 
 void out_sent_handler(DictionaryIterator *sent, void *context) {
-	// outgoing message was delivered
+	// outgoing message was delivered. Yay ;-)
 }
 
 void out_failed_handler(DictionaryIterator *failed, AppMessageResult reason, void *context) {
@@ -86,9 +86,8 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				return; //ignore message
 			}
 			
-			if (number_expected != 0) {
-				communication_cleanup();
-			}
+			communication_cleanup(); //clean up if necessary for new data
+
 			number_expected = dict_find(received, DICT_KEY_NUM_ITEMS)->value->uint8;
 			Tuple* sync_id_tuple = dict_find(received, DICT_KEY_SYNC_ID);
 			if (sync_id_tuple != NULL)
@@ -98,6 +97,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				//init buffer
 				number_received = 0;
 				index_expected = 0;
+				expecting_second_half = false;
 				buffer_size = 0;
 				buffer = malloc(sizeof(AgendaItem*)*number_expected);
 				
@@ -180,13 +180,14 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 				handle_data_gone(); //stop showing data
 				db_reset(); //reset database
 				
-				for (int i=0;i<number_received;i++) //insert buffered items into database
+				for (int i=0;i<number_received;i++) //insert buffered items into database. Database will take care of freeing memory
 					db_put(buffer[i]);
 				
 				handle_new_data(current_sync_id); //show new data, remember the sync_id
 				
 				//Reset to begin again
 				free(buffer);
+				buffer = 0;
 				buffer_size = 0;
 				number_expected = 0;
 				number_received = 0;
@@ -217,10 +218,11 @@ void in_dropped_handler(AppMessageResult reason, void *context) { //incoming mes
 }
 
 void communication_cleanup() { //reset everything to start state (also cleans up malloc'ed memory)
-	if (number_expected != 0) {
+	if (buffer != 0) {
 		for (int i=0;i<buffer_size;i++)
 			free(buffer[i]);
 		free(buffer);
+		buffer = 0;
 		
 		buffer_size = 0;
 		number_expected = 0;

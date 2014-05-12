@@ -39,6 +39,9 @@
 //Whether or not to light the display while scrolling
 #define SETTINGS_BOOL_LIGHT_WHILE_SCROLLING 0x2000
 	
+//Whether or not to persist only a limited number for performance reasons
+#define SETTINGS_BOOL_LIMIT_PERSIST 0x4000
+	
 void settings_persist(); //saves settings to persistent storage. (Does not have to be called from outside settings.c)
 void settings_restore_persisted(); //restores settings from persistent storage (if exists)
 
