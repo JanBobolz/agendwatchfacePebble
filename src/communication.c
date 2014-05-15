@@ -111,7 +111,6 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 			} else {
 				APP_LOG(APP_LOG_LEVEL_DEBUG, "Phone does not have any items to send");
 				sync_layer_set_progress(0,0);
-				handle_data_gone();
 				db_reset();
 				handle_new_data(current_sync_id);
 			}
@@ -177,10 +176,9 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 			
 			case COMMAND_DONE: //phone signals it sent all its data
 			if (number_expected-number_received == 0 && number_expected != 0) { //is message expected?
-				handle_data_gone(); //stop showing data
 				db_reset(); //reset database
 				
-				for (int i=0;i<number_received;i++) //insert buffered items into database. Database will take care of freeing memory
+				for (int i=0;i<number_received;i++) //insert buffered items into database. Database will take care of freeing memory later
 					db_put(buffer[i]);
 				
 				handle_new_data(current_sync_id); //show new data, remember the sync_id

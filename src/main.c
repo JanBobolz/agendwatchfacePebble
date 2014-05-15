@@ -13,7 +13,7 @@ caltime_t refresh_at = 0; //time where the item display should be refreshed next
 int num_layers = 0; //number of elements in item_layer and item_text
 int elapsed_item_num = 0; //number of items skipped because they were elapsed
 TextLayer **item_layers = 0; //list of all layers that were created for the displayed items
-char **item_texts = 0; //list of texts. item_text[i] corresponds to item_layer[i]
+char **item_texts = 0; //list of texts. item_text[i] corresponds to item_layer[i]. Does not necessarily include all strings (e.g., event texts are saved in the event)
 
 //Font according to settings
 GFont font; //font to use for items (and separators)
@@ -75,6 +75,7 @@ void set_font_from_settings() {
 			font_bold = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
 			line_height = 22;
 		break;
+		
 		case 2:
 			font = fonts_get_system_font(FONT_KEY_GOTHIC_24);
 			font_bold = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
@@ -187,21 +188,18 @@ int create_item_layers(int y, Layer* parent, AgendaItem* item, caltime_t relativ
 		}
 		
 		//Create text layer
-		if (row_text != 0) { //should we show any text at all?
-			item_texts[num_layers] = malloc(50*sizeof(char));
-			strncpy(item_texts[num_layers], row_text, 50);
-		}
-		else
-			item_texts[num_layers] = 0;
+		char* text = 0;
+		if (row_text != 0)
+			text = row_text; //set the reference to the text saved in the event struct
+		item_texts[num_layers] = 0; //no reference in item_texts for this layer (as the text should not be freed when tidying up UI, only by the database)
 		
-		//Create text layer
 		TextLayer *layer = text_layer_create(GRect(time_layer_width,y,144-time_layer_width,line_height*line_height_factor));
 		text_layer_set_background_color(layer, GColorWhite);
 		text_layer_set_text_color(layer, GColorBlack);
 		text_layer_set_font(layer, row_design & ROW_DESIGN_TEXT_BOLD ? font_bold : font);
 		text_layer_set_overflow_mode(layer, GTextOverflowModeFill);
-		if (item_texts[num_layers] != 0)
-			text_layer_set_text(layer, item_texts[num_layers]);
+		if (text != 0)
+			text_layer_set_text(layer, text);
 		layer_add_child(parent, text_layer_get_layer(layer));
 		item_layers[num_layers++] = layer;
 		
@@ -335,7 +333,7 @@ void handle_sync_failed() {
 	send_sync_request(last_sync_id);
 }
 
-void handle_data_gone() { //Database will go down. Stop showing stuff
+void handle_data_gone() { //Database will go down. Stop showing stuff, as the texts are gone
 	remove_displayed_data();
 }
 

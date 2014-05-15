@@ -1,37 +1,37 @@
 {
-    "resources": {
-        "media": [
-            {
-                "name": "FONT_ROBOTO_CONDENSED_30",
-                "characterRegex": "[0-9: ]",
-                "type": "font",
-                "file": "fonts/Roboto-Condensed-webfont.ttf"
-            },
-            {
-                "name": "FONT_ROBOTO_CONDENSED_BOLD_38",
-                "characterRegex": "[0-9 :]",
-                "type": "font",
-                "file": "fonts/Roboto-BoldCondensed-webfont.ttf"
-            },
-            {
-                "name": "IMAGE_ICON",
-                "menuIcon": true,
-                "type": "png",
-                "file": "images/watch_icon.png"
-            }
-        ]
-    },
-    "companyName": "janbobolz",
-    "shortName": "Agenda",
-    "uuid": "1f366804-f1d2-4288-b71a-708661777887",
-    "versionCode": 10,
-    "capabilities": [
-        ""
-    ],
-    "longName": "Agenda Watchface",
+    "versionLabel": "2.1",
     "watchapp": {
         "watchface": true
     },
+    "capabilities": [
+        ""
+    ],
     "appKeys": {},
-    "versionLabel": "2.1"
+    "longName": "Agenda Watchface",
+    "shortName": "Agenda",
+    "resources": {
+        "media": [
+            {
+                "file": "fonts/Roboto-Condensed-webfont.ttf",
+                "characterRegex": "[0-9: ]",
+                "type": "font",
+                "name": "FONT_ROBOTO_CONDENSED_30"
+            },
+            {
+                "file": "fonts/Roboto-BoldCondensed-webfont.ttf",
+                "characterRegex": "[0-9 :]",
+                "type": "font",
+                "name": "FONT_ROBOTO_CONDENSED_BOLD_38"
+            },
+            {
+                "menuIcon": true,
+                "file": "images/watch_icon.png",
+                "type": "png",
+                "name": "IMAGE_ICON"
+            }
+        ]
+    },
+    "versionCode": 10,
+    "companyName": "janbobolz",
+    "uuid": "1f366804-f1d2-4288-b71a-708661777887"
 }

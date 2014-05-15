@@ -1,4 +1,5 @@
 #include <pebble.h>
+#include <main.h>
 #include <item_db.h>
 #include <datatypes.h>
 #include <persist_const.h>
@@ -11,6 +12,7 @@ int current_num_elems = 0; //number of actual entries in db_events
 bool dirty_bit = 0; //1 if there were changes to the database since last persist
 
 void db_reset() { //empties database. Also good to call to tidy up occupied heap space
+	handle_data_gone(); //notify main.c of our removing the stuff
 	for (int i=0; i<current_num_elems; i++)
 		free(db_items[i]);
 	
