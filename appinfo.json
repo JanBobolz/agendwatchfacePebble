@@ -1,5 +1,5 @@
 {
-    "versionLabel": "2.1",
+    "versionLabel": "2.1.1",
     "watchapp": {
         "watchface": true
     },
@@ -12,6 +12,12 @@
     "resources": {
         "media": [
             {
+                "menuIcon": true,
+                "file": "images/watch_icon.png",
+                "type": "png",
+                "name": "IMAGE_ICON"
+            },
+            {
                 "file": "fonts/Roboto-Condensed-webfont.ttf",
                 "characterRegex": "[0-9: ]",
                 "type": "font",
@@ -22,12 +28,6 @@
                 "characterRegex": "[0-9 :]",
                 "type": "font",
                 "name": "FONT_ROBOTO_CONDENSED_BOLD_38"
-            },
-            {
-                "menuIcon": true,
-                "file": "images/watch_icon.png",
-                "type": "png",
-                "name": "IMAGE_ICON"
             }
         ]
     },
