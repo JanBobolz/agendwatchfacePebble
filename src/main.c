@@ -49,6 +49,8 @@ GFont time_font = 0; //Font for current time (custom font)
 GFont date_font; //Font for the current date (system font)
 int time_font_id = -1; //id of time_font according to Android settings (-1 being not loaded)
 int header_height = 0; //height of the header
+int header_time_y_offset = 0; //vertical offset of the time in the header
+int header_weekday_y_offset = 0; //vertical offset of the right side of the header
 int header_time_width = 0; //width of the time layer
 int header_weekday_height = 0; //height of the weekday layer
 
@@ -424,11 +426,11 @@ void set_time_font_from_settings() {
 		time_font_id = time_font_id_new;
 		switch (time_font_id) {
 			case 1: //big time
-				time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ROBOTO_CONDENSED_BOLD_38));
+				time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ROBOTO_CONDENSED_BOLD_40));
 				break;
 			case 0:
 			default:
-				time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ROBOTO_CONDENSED_30));
+				time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ROBOTO_CONDENSED_32));
 				break;
 		}
 	}
@@ -438,16 +440,20 @@ void set_time_font_from_settings() {
 		case 1: //big time/header
 			date_font = fonts_get_system_font(FONT_KEY_GOTHIC_18);
 			header_weekday_height = 18;
-			header_height = 48;
-			header_time_width = 95;
+			header_height = 44;
+			header_time_width = 98;
+			header_time_y_offset = -6;
+			header_weekday_y_offset = -2;
 		break;
 		
 		case 0: //small time/header
 		default:
 			date_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
-			header_weekday_height = 16;
-			header_height = 40;
-			header_time_width = 75;
+			header_weekday_height = 14;
+			header_height = 32;
+			header_time_width = 77;
+			header_time_y_offset = -6;
+			header_weekday_y_offset = -2;
 		break;
 	}
 }
@@ -462,25 +468,28 @@ void create_header(Layer *window_layer) {
 		set_time_font_from_settings(); //also sets header_height etc.
 		
 		//Create time layer
-		text_layer_time = text_layer_create(GRect(0, 0, header_time_width, header_height));
+		text_layer_time = text_layer_create(GRect(0, header_time_y_offset, header_time_width, header_height));
 		text_layer_set_background_color(text_layer_time, GColorBlack);
 		text_layer_set_text_color(text_layer_time, GColorWhite);
 		text_layer_set_font(text_layer_time, time_font);
+		text_layer_set_overflow_mode(text_layer_time, GTextOverflowModeWordWrap);
 		layer_add_child(window_layer, text_layer_get_layer(text_layer_time));
 		
 		//Create date layer
-		text_layer_date = text_layer_create(GRect(header_time_width, header_weekday_height, 144-header_time_width, header_height-header_weekday_height));
+		text_layer_date = text_layer_create(GRect(header_time_width, header_weekday_y_offset+header_weekday_height, 144-header_time_width, header_height-header_weekday_height));
 		text_layer_set_background_color(text_layer_date, GColorBlack);
 		text_layer_set_text_color(text_layer_date, GColorWhite);
 		text_layer_set_text_alignment(text_layer_date, GTextAlignmentRight);
+		text_layer_set_overflow_mode(text_layer_date, GTextOverflowModeWordWrap);
 		text_layer_set_font(text_layer_date, date_font);
 		layer_add_child(window_layer, text_layer_get_layer(text_layer_date));
 		
 		//Create weekday layer
-		text_layer_weekday = text_layer_create(GRect(header_time_width, 0, 144-header_time_width, header_weekday_height));
+		text_layer_weekday = text_layer_create(GRect(header_time_width, header_weekday_y_offset, 144-header_time_width, header_weekday_height));
 		text_layer_set_background_color(text_layer_weekday, GColorBlack);
 		text_layer_set_text_color(text_layer_weekday, GColorWhite);
 		text_layer_set_text_alignment(text_layer_weekday, GTextAlignmentRight);
+		text_layer_set_overflow_mode(text_layer_weekday, GTextOverflowModeWordWrap);
 		text_layer_set_font(text_layer_weekday, date_font);
 		layer_add_child(window_layer, text_layer_get_layer(text_layer_weekday));
 		

@@ -16,13 +16,13 @@
                 "type": "font",
                 "file": "fonts/Roboto-Condensed-webfont.ttf",
                 "characterRegex": "[0-9: ]",
-                "name": "FONT_ROBOTO_CONDENSED_30"
+                "name": "FONT_ROBOTO_CONDENSED_32"
             },
             {
                 "type": "font",
                 "file": "fonts/Roboto-BoldCondensed-webfont.ttf",
                 "characterRegex": "[0-9 :]",
-                "name": "FONT_ROBOTO_CONDENSED_BOLD_38"
+                "name": "FONT_ROBOTO_CONDENSED_BOLD_40"
             }
         ]
     },
