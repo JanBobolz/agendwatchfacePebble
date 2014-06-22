@@ -27,6 +27,7 @@ char **day_separator_texts = 0; //texts on separators
 
 Window *window; //the watchface's only window
 Layer *root_layer; //the layer containing the window's content (different from window_get_root_layer(window))
+InverterLayer *inverter_layer = 0; //the inverter layer or 0 if not applicable
 TextLayer *text_layer_time = 0; //layer for the current time (if header enabled in settings)
 TextLayer *text_layer_date = 0; //layer for current date (if header enabled)
 TextLayer *text_layer_weekday = 0; //layer for current weekday (if header enabled)
@@ -550,6 +551,18 @@ void handle_new_settings() {
 	
 	if (settings_get_bool_flags() & SETTINGS_BOOL_ENABLE_SCROLL)
 		accel_tap_service_subscribe(&accel_tap_handler);
+	
+	if (settings_get_bool_flags() & SETTINGS_BOOL_INVERT) {
+		if (inverter_layer == 0) {
+			inverter_layer = inverter_layer_create(GRect(0,0,144,168));
+			layer_add_child(window_get_root_layer(window), inverter_layer_get_layer(inverter_layer));
+		}
+	} else {
+		if (inverter_layer != 0) {
+			inverter_layer_destroy(inverter_layer);
+			inverter_layer = 0;
+		}
+	}
 }
 
 //Destroys current animation (not sure if this would be safe to call during a running animation)
@@ -736,6 +749,8 @@ void handle_deinit(void) {
 	destroy_header();
 	remove_displayed_data();
 	layer_destroy(root_layer);
+	if (inverter_layer != 0)
+		inverter_layer_destroy(inverter_layer);
 	window_destroy(window);
 	
 	//Unload font(s)

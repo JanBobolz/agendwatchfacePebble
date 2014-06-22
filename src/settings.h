@@ -42,6 +42,9 @@
 //Whether or not to persist only a limited number for performance reasons
 #define SETTINGS_BOOL_LIMIT_PERSIST 0x4000
 	
+//Whether or not to invert the whole watchface
+#define SETTINGS_BOOL_INVERT 0x8000
+	
 void settings_persist(); //saves settings to persistent storage. (Does not have to be called from outside settings.c)
 void settings_restore_persisted(); //restores settings from persistent storage (if exists)
 
