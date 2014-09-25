@@ -328,7 +328,7 @@ void handle_new_data(uint8_t sync_id) { //Sync done. Show new data from database
 	last_sync = time(NULL); //remember successful sync
 	last_sync_id = sync_id;
 	
-	scroll(0);
+	//scroll(0);
 }
 
 void handle_sync_failed() {
