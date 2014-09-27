@@ -17,7 +17,7 @@
             {
                 "characterRegex": "[0-9: ]",
                 "file": "fonts/Roboto-Condensed-webfont.ttf",
-                "name": "FONT_ROBOTO_CONDENSED_32",
+                "name": "FONT_ROBOTO_CONDENSED_30",
                 "type": "font"
             },
             {

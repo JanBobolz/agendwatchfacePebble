@@ -352,7 +352,7 @@ void update_date(struct tm *time) { //updates the layer for the current date (if
 	if (text_layer_date != 0) {
 		static char date_text[] = "NameOfTheMonth 01";
 		
-		if (header_time_width <= 75) //if time takes much vertical space, abbreviate
+		if (time_font_id == 0) //big time: abbreviate
 			strftime(date_text, sizeof(date_text), "%B %d", time); //don't abbreviate
 		else
 			strftime(date_text, sizeof(date_text), "%b %d", time); //abbreviate
@@ -366,10 +366,10 @@ void update_date(struct tm *time) { //updates the layer for the current date (if
 		uint8_t battery_percent = battery_state_service_peek().charge_percent;
 		
 		if (battery_percent <= 20 || battery_state_service_peek().is_charging) {
-			snprintf(weekday_text, sizeof(weekday_text), header_time_width <= 75 ? "Bat: %d %%" : "B: %d%%", battery_percent);
+			snprintf(weekday_text, sizeof(weekday_text), time_font_id == 0 ? "Bat: %d %%" : "B: %d%%", battery_percent);
 		}
 		else {
-			if (header_time_width <= 75) //if time takes much vertical space, abbreviate
+			if (time_font_id == 0) //big time: abbreviate
 				strftime(weekday_text, sizeof(weekday_text), "%A", time); //don't abbreviate
 			else
 				strftime(weekday_text, sizeof(weekday_text), "%a", time); //abbreviate
@@ -430,7 +430,7 @@ void set_time_font_from_settings() {
 				break;
 			case 0:
 			default:
-				time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ROBOTO_CONDENSED_32));
+				time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ROBOTO_CONDENSED_30));
 				break;
 		}
 	}
@@ -449,10 +449,10 @@ void set_time_font_from_settings() {
 		case 0: //small time/header
 		default:
 			date_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
-			header_weekday_height = 14;
-			header_height = 32;
-			header_time_width = 77;
-			header_time_y_offset = -6;
+			header_weekday_height = 15;
+			header_height = 33;
+			header_time_width = 74;
+			header_time_y_offset = -3;
 			header_weekday_y_offset = -2;
 		break;
 	}
