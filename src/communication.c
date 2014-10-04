@@ -5,7 +5,7 @@
 #include <communication.h>
 
 //Version of the watchapp. Will be compared to what version the (updated) phone app expects
-#define WATCHAPP_VERSION 12
+#define WATCHAPP_VERSION 13
 #define BACKWARD_COMPAT_VERSION 8
 //BACKWARD_COMPAT_VERSION smallest version number that this version is backwards compatible to (so an Android app bundling that (older) version would still work)
 	

@@ -215,7 +215,7 @@ int create_item_layers(int y, Layer* parent, AgendaItem* item, caltime_t relativ
 //Creates separator (like the "Monday" layer, separating today's items from tomorrow's), returns y+[own height]
 int create_day_separator_layer(int i, int y, Layer* parent, caltime_t day) {
 	static char *daystrings[8] = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Tomorrow"};
-	static char *monthstrings[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"};
+	static char *monthstrings[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 	
 	//Set text
 	day_separator_texts[i] = malloc(sizeof(char)*20);
